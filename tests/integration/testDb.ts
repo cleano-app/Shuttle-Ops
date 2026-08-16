@@ -87,36 +87,34 @@ export interface Fixture {
 }
 
 /**
- * Minimal scaffold shared by most tests: one area/route/vehicle, one
- * profile per staff role (auth.users rows are NOT created here — these
- * tests insert directly into `profiles` with fabricated UUIDs rather than
- * going through supabase.auth.admin.createUser(), since profiles.id only
- * has to exist as a value auth.uid() can match, not a real registered
- * user, for RLS-policy testing purposes).
+ * Minimal scaffold shared by most tests: one area/route/vehicle, one real
+ * user per staff role, pulled from the accounts `npm run db:seed` already
+ * created — NOT fabricated UUIDs. profiles.id has a hard FK to
+ * auth.users(id) (0001_profiles.sql), so inserting a profiles row with a
+ * made-up UUID fails with a foreign-key violation on any project where
+ * that constraint is actually enforced (confirmed against the real
+ * project). Reusing the seeded dev accounts sidesteps needing this test
+ * suite to also drive supabase.auth.admin.createUser() itself.
  */
 export async function seedFixture(client: Client): Promise<Fixture> {
-  const adminUserId = randomUUID();
-  const officeUserId = randomUUID();
-  const dispatcherUserId = randomUUID();
-  const driverUserId = randomUUID();
-
-  // profiles.id normally references auth.users(id) — for these tests we
-  // insert profiles rows directly against a superuser connection, which
-  // bypasses that FK check only if the constraint is deferred or absent;
-  // if the target project enforces it strictly, seed matching auth.users
-  // rows first via the admin client instead. Documented here as a known
-  // adjustment point once this suite runs against a real project.
-  for (const [id, role] of [
-    [adminUserId, "admin"],
-    [officeUserId, "office"],
-    [dispatcherUserId, "dispatcher"],
-    [driverUserId, "driver"],
-  ] as const) {
-    await client.query(
-      "insert into profiles (id, role, display_name) values ($1, $2, $3) on conflict (id) do nothing",
-      [id, role, `Test ${role}`]
-    );
+  const { rows: profileRows } = await client.query<{ id: string; role: string }>(
+    "select id, role from profiles where role in ('admin', 'office', 'dispatcher', 'driver')"
+  );
+  const byRole: Record<string, string> = {};
+  for (const row of profileRows) {
+    if (!byRole[row.role]) byRole[row.role] = row.id;
   }
+  for (const role of ["admin", "office", "dispatcher", "driver"]) {
+    if (!byRole[role]) {
+      throw new Error(
+        `No seeded '${role}' profile found. Run \`npm run db:seed\` against this database before the integration/RLS suite.`
+      );
+    }
+  }
+  const adminUserId = byRole.admin;
+  const officeUserId = byRole.office;
+  const dispatcherUserId = byRole.dispatcher;
+  const driverUserId = byRole.driver;
 
   const { rows: areaRows } = await client.query(
     "insert into areas (name, country) values ($1, $2) returning id",

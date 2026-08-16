@@ -44,7 +44,15 @@ describe("allocate_booking_capacity", () => {
 
   it("succeeds when selling exactly the released seats, fails on one more", async () => {
     const departureId = await seedDeparture(client, fixture, { seats_capacity: 2, seats_released: 2 });
-    const passengers = [bookingPassengerPayload(fixture.passengerId), bookingPassengerPayload(fixture.passengerId)];
+    // status: 'confirmed' isolates the seat check from the unsecured
+    // provisional cap (§12 check 6) — with only 2 released seats,
+    // floor(2 * 30%) = 0 unsecured slots, so leaving these 'provisional'
+    // (the payload default) would trip the cap before the seat check this
+    // test is actually about ever gets exercised.
+    const passengers = [
+      bookingPassengerPayload(fixture.passengerId, { status: "confirmed" }),
+      bookingPassengerPayload(fixture.passengerId, { status: "confirmed" }),
+    ];
 
     await withAuthContext(client, fixture.officeUserId, () =>
       allocate(client, { departureId, leadPassengerId: fixture.passengerId, passengers })
@@ -55,7 +63,7 @@ describe("allocate_booking_capacity", () => {
         allocate(client, {
           departureId,
           leadPassengerId: fixture.passengerId,
-          passengers: [bookingPassengerPayload(fixture.passengerId)],
+          passengers: [bookingPassengerPayload(fixture.passengerId, { status: "confirmed" })],
         })
       )
     ).rejects.toThrow(/no_seats/);
@@ -272,11 +280,15 @@ describe("allocate_booking_capacity concurrency", () => {
     const clientA = await connectAsSuperuser();
     const clientB = await connectAsSuperuser();
     try {
+      // status: 'confirmed' for the same reason as the seat-boundary test
+      // above — with 1 released seat, floor(1 * 30%) = 0 unsecured slots,
+      // so a 'provisional' row would fail the cap check regardless of the
+      // seat lock this test is isolating.
       const callA = withAuthContext(clientA, fixture.officeUserId, () =>
-        allocate(clientA, { departureId, leadPassengerId: fixture.passengerId, passengers: [bookingPassengerPayload(fixture.passengerId)] })
+        allocate(clientA, { departureId, leadPassengerId: fixture.passengerId, passengers: [bookingPassengerPayload(fixture.passengerId, { status: "confirmed" })] })
       );
       const callB = withAuthContext(clientB, fixture.officeUserId, () =>
-        allocate(clientB, { departureId, leadPassengerId: fixture.passengerId, passengers: [bookingPassengerPayload(fixture.passengerId)] })
+        allocate(clientB, { departureId, leadPassengerId: fixture.passengerId, passengers: [bookingPassengerPayload(fixture.passengerId, { status: "confirmed" })] })
       );
 
       const results = await Promise.allSettled([callA, callB]);
