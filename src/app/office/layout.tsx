@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: "/office/dashboard", label: "Dashboard" },
   { href: "/office/booking-console", label: "Booking Console" },
   { href: "/office/departures", label: "Departures" },
+  { href: "/office/dispatch", label: "Dispatch" },
   { href: "/office/passengers", label: "Passengers" },
   { href: "/office/vehicles", label: "Vehicles" },
   { href: "/office/tariffs", label: "Tariffs" },

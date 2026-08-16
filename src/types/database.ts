@@ -132,6 +132,79 @@ export interface AllocateTripResult {
   return: AllocateBookingResult | null;
 }
 
+// --- Phase 2 (Dispatch) ---
+
+export type StopType = "pickup" | "dropoff" | "crossing" | "waypoint";
+export type StopStatus = "pending" | "arrived" | "completed" | "skipped" | "problem";
+export type StopPassengerRole = "pickup" | "dropoff";
+export type DriverAssignmentRole = "driver" | "co_driver";
+export type DriverAssignmentStatus = "assigned" | "accepted" | "declined" | "completed";
+export type DutyEventType = "start" | "arrived" | "break" | "fuel" | "border" | "handover" | "end";
+
+/** Return shape of get_driver_assignments() — one entry per active
+ * assignment, joined with just enough departure/route/vehicle info for
+ * the driver app's own list, per build spec §31 (driver sees their
+ * assigned vehicle/departure/segment, nothing else). */
+export interface DriverAssignmentSummary {
+  assignment_id: string;
+  departure_id: string;
+  direction: DepartureDirection;
+  depart_at: string;
+  departure_status: DepartureStatus;
+  route_name: string;
+  vehicle_id: string;
+  vehicle_registration: string;
+  from_stop_sequence: number | null;
+  to_stop_sequence: number | null;
+  assignment_status: DriverAssignmentStatus;
+  crossing_reference: string | null;
+  crossing_checkin_deadline: string | null;
+}
+
+/** One passenger's safe fields within get_driver_stop_manifest()'s output
+ * — never vulnerability_notes, fares, or deposit_status (build spec §4). */
+export interface DriverManifestPassenger {
+  operational_stop_passenger_id: string;
+  role: StopPassengerRole;
+  boarded: boolean;
+  full_name: string;
+  phone: string | null;
+  category: PassengerCategory;
+  mobility_needs: string | null;
+  wheelchair_space: boolean;
+  luggage_large: number;
+  luggage_small: number;
+  luggage_hand: number;
+  luggage_oversize: number;
+  no_show: boolean;
+}
+
+export interface DriverManifestStop {
+  stop_id: string;
+  address: {
+    line1: string;
+    postcode: string;
+    fixed_point_name: string | null;
+    access_notes: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  stop_type: StopType;
+  planned_sequence: number;
+  planned_arrival_at: string | null;
+  actual_arrival_at: string | null;
+  actual_departure_at: string | null;
+  status: StopStatus;
+  locked: boolean;
+  driver_notes: string | null;
+  passengers: DriverManifestPassenger[];
+}
+
+/** Return shape of get_driver_stop_manifest(p_departure_id). */
+export interface DriverStopManifest {
+  stops: DriverManifestStop[];
+}
+
 // Relationships is always [] here — this project doesn't rely on
 // supabase-js's foreign-table embedding, so every table gets an empty
 // array instead of repeating the field by hand below (same helper as
@@ -386,6 +459,7 @@ interface TablesRaw {
       notes: string | null;
       created_by: string | null;
       created_at: string;
+      vehicle_duty_id: string | null;
     };
     Insert: {
       id?: string;
@@ -407,6 +481,7 @@ interface TablesRaw {
       notes?: string | null;
       created_by?: string | null;
       created_at?: string;
+      vehicle_duty_id?: string | null;
     };
     Update: {
       id?: string;
@@ -428,6 +503,7 @@ interface TablesRaw {
       notes?: string | null;
       created_by?: string | null;
       created_at?: string;
+      vehicle_duty_id?: string | null;
     };
   };
   departure_vehicles: {
@@ -918,6 +994,351 @@ interface TablesRaw {
       created_at?: string;
     };
   };
+  leg_timings: {
+    Row: {
+      id: string;
+      from_area_id: string;
+      to_area_id: string;
+      day_of_week: number;
+      time_band: string;
+      sample_count: number;
+      median_minutes: number | null;
+      last_updated: string;
+    };
+    Insert: {
+      id?: string;
+      from_area_id: string;
+      to_area_id: string;
+      day_of_week: number;
+      time_band: string;
+      sample_count?: number;
+      median_minutes?: number | null;
+      last_updated?: string;
+    };
+    Update: {
+      id?: string;
+      from_area_id?: string;
+      to_area_id?: string;
+      day_of_week?: number;
+      time_band?: string;
+      sample_count?: number;
+      median_minutes?: number | null;
+      last_updated?: string;
+    };
+  };
+  route_templates: {
+    Row: {
+      id: string;
+      route_id: string;
+      direction: DepartureDirection;
+      name: string;
+      notes: string | null;
+      active: boolean;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      route_id: string;
+      direction: DepartureDirection;
+      name: string;
+      notes?: string | null;
+      active?: boolean;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      route_id?: string;
+      direction?: DepartureDirection;
+      name?: string;
+      notes?: string | null;
+      active?: boolean;
+      created_at?: string;
+    };
+  };
+  route_template_stops: {
+    Row: {
+      id: string;
+      template_id: string;
+      address_id: string | null;
+      area_id: string | null;
+      sequence: number;
+      default_offset_minutes: number;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      template_id: string;
+      address_id?: string | null;
+      area_id?: string | null;
+      sequence?: number;
+      default_offset_minutes?: number;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      template_id?: string;
+      address_id?: string | null;
+      area_id?: string | null;
+      sequence?: number;
+      default_offset_minutes?: number;
+      created_at?: string;
+    };
+  };
+  vehicle_duties: {
+    Row: {
+      id: string;
+      vehicle_id: string;
+      duty_date: string;
+      start_odometer: number | null;
+      end_odometer: number | null;
+      notes: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      vehicle_id: string;
+      duty_date: string;
+      start_odometer?: number | null;
+      end_odometer?: number | null;
+      notes?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      vehicle_id?: string;
+      duty_date?: string;
+      start_odometer?: number | null;
+      end_odometer?: number | null;
+      notes?: string | null;
+      created_at?: string;
+    };
+  };
+  driver_assignments: {
+    Row: {
+      id: string;
+      departure_id: string;
+      vehicle_id: string;
+      driver_id: string;
+      role: DriverAssignmentRole;
+      from_stop_sequence: number | null;
+      to_stop_sequence: number | null;
+      assigned_by: string | null;
+      assigned_at: string;
+      accepted_at: string | null;
+      status: DriverAssignmentStatus;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      departure_id: string;
+      vehicle_id: string;
+      driver_id: string;
+      role?: DriverAssignmentRole;
+      from_stop_sequence?: number | null;
+      to_stop_sequence?: number | null;
+      assigned_by?: string | null;
+      assigned_at?: string;
+      accepted_at?: string | null;
+      status?: DriverAssignmentStatus;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      departure_id?: string;
+      vehicle_id?: string;
+      driver_id?: string;
+      role?: DriverAssignmentRole;
+      from_stop_sequence?: number | null;
+      to_stop_sequence?: number | null;
+      assigned_by?: string | null;
+      assigned_at?: string;
+      accepted_at?: string | null;
+      status?: DriverAssignmentStatus;
+      created_at?: string;
+    };
+  };
+  operational_stops: {
+    Row: {
+      id: string;
+      departure_id: string;
+      departure_vehicle_id: string | null;
+      address_id: string;
+      stop_type: StopType;
+      planned_sequence: number;
+      planned_arrival_at: string | null;
+      actual_arrival_at: string | null;
+      actual_departure_at: string | null;
+      passengers_expected: number;
+      luggage_expected: number;
+      parcels_expected: number;
+      locked: boolean;
+      driver_notes: string | null;
+      status: StopStatus;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      departure_id: string;
+      departure_vehicle_id?: string | null;
+      address_id: string;
+      stop_type: StopType;
+      planned_sequence?: number;
+      planned_arrival_at?: string | null;
+      actual_arrival_at?: string | null;
+      actual_departure_at?: string | null;
+      passengers_expected?: number;
+      luggage_expected?: number;
+      parcels_expected?: number;
+      locked?: boolean;
+      driver_notes?: string | null;
+      status?: StopStatus;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      departure_id?: string;
+      departure_vehicle_id?: string | null;
+      address_id?: string;
+      stop_type?: StopType;
+      planned_sequence?: number;
+      planned_arrival_at?: string | null;
+      actual_arrival_at?: string | null;
+      actual_departure_at?: string | null;
+      passengers_expected?: number;
+      luggage_expected?: number;
+      parcels_expected?: number;
+      locked?: boolean;
+      driver_notes?: string | null;
+      status?: StopStatus;
+      created_at?: string;
+    };
+  };
+  operational_stop_passengers: {
+    Row: {
+      id: string;
+      operational_stop_id: string;
+      booking_passenger_id: string;
+      role: StopPassengerRole;
+      boarded: boolean;
+    };
+    Insert: {
+      id?: string;
+      operational_stop_id: string;
+      booking_passenger_id: string;
+      role: StopPassengerRole;
+      boarded?: boolean;
+    };
+    Update: {
+      id?: string;
+      operational_stop_id?: string;
+      booking_passenger_id?: string;
+      role?: StopPassengerRole;
+      boarded?: boolean;
+    };
+  };
+  handovers: {
+    Row: {
+      id: string;
+      departure_id: string;
+      vehicle_id: string;
+      stop_id: string | null;
+      from_driver_id: string;
+      to_driver_id: string;
+      occurred_at: string | null;
+      odometer: number | null;
+      fuel_level: string | null;
+      cash_float_gbp: number | null;
+      cash_float_eur: number | null;
+      passenger_count_confirmed: number | null;
+      parcel_count_confirmed: number | null;
+      keys_transferred: boolean;
+      notes: string | null;
+      from_signature: string | null;
+      to_signature: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      departure_id: string;
+      vehicle_id: string;
+      stop_id?: string | null;
+      from_driver_id: string;
+      to_driver_id: string;
+      occurred_at?: string | null;
+      odometer?: number | null;
+      fuel_level?: string | null;
+      cash_float_gbp?: number | null;
+      cash_float_eur?: number | null;
+      passenger_count_confirmed?: number | null;
+      parcel_count_confirmed?: number | null;
+      keys_transferred?: boolean;
+      notes?: string | null;
+      from_signature?: string | null;
+      to_signature?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      departure_id?: string;
+      vehicle_id?: string;
+      stop_id?: string | null;
+      from_driver_id?: string;
+      to_driver_id?: string;
+      occurred_at?: string | null;
+      odometer?: number | null;
+      fuel_level?: string | null;
+      cash_float_gbp?: number | null;
+      cash_float_eur?: number | null;
+      passenger_count_confirmed?: number | null;
+      parcel_count_confirmed?: number | null;
+      keys_transferred?: boolean;
+      notes?: string | null;
+      from_signature?: string | null;
+      to_signature?: string | null;
+      created_at?: string;
+    };
+  };
+  driver_duty_events: {
+    Row: {
+      id: string;
+      driver_id: string;
+      vehicle_id: string | null;
+      departure_id: string | null;
+      event_type: DutyEventType;
+      event_at: string;
+      client_occurred_at: string | null;
+      client_id: string;
+      odometer: number | null;
+      note: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      driver_id: string;
+      vehicle_id?: string | null;
+      departure_id?: string | null;
+      event_type: DutyEventType;
+      event_at?: string;
+      client_occurred_at?: string | null;
+      client_id: string;
+      odometer?: number | null;
+      note?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      driver_id?: string;
+      vehicle_id?: string | null;
+      departure_id?: string | null;
+      event_type?: DutyEventType;
+      event_at?: string;
+      client_occurred_at?: string | null;
+      client_id?: string;
+      odometer?: number | null;
+      note?: string | null;
+      created_at?: string;
+    };
+  };
 }
 
 export interface Database {
@@ -972,6 +1393,65 @@ export interface Database {
           p_booked_by_user_id?: string | null;
         };
         Returns: AllocateTripResult;
+      };
+      get_driver_assignments: {
+        Args: Record<string, never>;
+        Returns: DriverAssignmentSummary[];
+      };
+      get_driver_stop_manifest: {
+        Args: { p_departure_id: string };
+        Returns: DriverStopManifest;
+      };
+      record_stop_arrival: {
+        Args: {
+          p_stop_id: string;
+          p_client_id: string;
+          p_odometer?: number | null;
+          p_note?: string | null;
+        };
+        Returns: { status: string };
+      };
+      record_stop_departure: {
+        Args: { p_stop_id: string };
+        Returns: { status: string };
+      };
+      record_stop_problem: {
+        Args: { p_stop_id: string; p_note: string };
+        Returns: { status: string };
+      };
+      record_passenger_boarded: {
+        Args: {
+          p_operational_stop_passenger_id: string;
+          p_boarded?: boolean;
+          p_no_show?: boolean;
+        };
+        Returns: { status: string };
+      };
+      respond_to_driver_assignment: {
+        Args: { p_assignment_id: string; p_accept: boolean };
+        Returns: { status: DriverAssignmentStatus };
+      };
+      create_handover: {
+        Args: {
+          p_departure_id: string;
+          p_vehicle_id: string;
+          p_to_driver_id: string;
+          p_stop_id?: string | null;
+          p_odometer?: number | null;
+          p_fuel_level?: string | null;
+          p_cash_float_gbp?: number | null;
+          p_cash_float_eur?: number | null;
+          p_passenger_count_confirmed?: number | null;
+          p_parcel_count_confirmed?: number | null;
+          p_keys_transferred?: boolean;
+          p_notes?: string | null;
+          p_signature?: string | null;
+        };
+        Returns: { handover_id: string };
+      };
+      confirm_handover: {
+        Args: { p_handover_id: string; p_signature: string };
+        Returns: { status: string };
       };
     };
   };

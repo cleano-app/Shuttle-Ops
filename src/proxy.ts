@@ -11,32 +11,37 @@ import { withSecureCookieOptions } from "@/lib/supabase/cookieOptions";
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, withSecureCookieOptions(options))
-          );
-        },
-      },
-    }
-  );
-
-  // getUser() revalidates against Supabase (unlike getSession(), which just
-  // trusts the cookie) - wrapped defensively so a transient Supabase outage
-  // degrades to "treat as logged out" rather than a 500 on every request.
+  // Both client construction AND getUser() are inside this try/catch —
+  // not just getUser(). @supabase/ssr's createServerClient throws
+  // synchronously (before any network call) if the URL/key come through
+  // empty, e.g. NEXT_PUBLIC_SUPABASE_URL missing from the deployment's
+  // env vars — confirmed live: that exact misconfiguration 500'd every
+  // request in Middleware with zero outgoing requests logged, because the
+  // original version here only wrapped getUser(), not construction. A
+  // misconfigured/unreachable Supabase should degrade to "treat as logged
+  // out" (redirect to /login), never crash the whole app.
   let user = null;
   try {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) =>
+              request.cookies.set(name, value)
+            );
+            response = NextResponse.next({ request });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              response.cookies.set(name, value, withSecureCookieOptions(options))
+            );
+          },
+        },
+      }
+    );
     const result = await supabase.auth.getUser();
     user = result.data.user;
   } catch {
