@@ -120,6 +120,12 @@ export default async function DispatchBoardPage({
         <p className="text-sm text-slate-500">
           {new Date(departure.depart_at).toLocaleString("en-GB", { dateStyle: "full", timeStyle: "short" })}
         </p>
+        <a
+          href={`/api/pdf/manifest/${id}`}
+          className="mt-2 inline-block text-sm font-medium text-brand-dark underline"
+        >
+          Download fallback manifest (PDF)
+        </a>
       </div>
 
       {departure.crossing_checkin_deadline && (

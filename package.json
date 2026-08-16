@@ -12,9 +12,11 @@
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "db:migrate": "tsx scripts/run-migrations.ts",
     "db:seed": "tsx scripts/seed-users.ts",
-    "db:seed-demo": "tsx scripts/seed-demo-data.ts"
+    "db:seed-demo": "tsx scripts/seed-demo-data.ts",
+    "db:clean-test-data": "tsx scripts/clean-test-data.ts"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.6.1",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.111.0",
     "next": "16.2.12",

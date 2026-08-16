@@ -200,3 +200,75 @@ export function bookingPassengerPayload(
     ...overrides,
   };
 }
+
+export interface DispatchScenario {
+  departureId: string;
+  /** Stop within the driver's assigned range (sequence 0). */
+  stopId: string;
+  /** Stop deliberately OUTSIDE the driver's assigned range (sequence 1)
+   * — proves driver_covers_stop()/the manifest function actually scope by
+   * range rather than just by departure. */
+  outOfRangeStopId: string;
+  bookingPassengerId: string;
+}
+
+/**
+ * Builds a departure with two stops (sequence 0 and 1) and one confirmed
+ * passenger at stop 0, for testing the Phase 2 driver-facing functions.
+ * Does NOT create the driver_assignment itself — callers insert that with
+ * whatever from/to_stop_sequence bounds their test needs.
+ */
+export async function seedDispatchScenario(client: Client, fixture: Fixture): Promise<DispatchScenario> {
+  const departureId = await seedDeparture(client, fixture, { seats_capacity: 4, seats_released: 4 });
+
+  const { rows: bookingRows } = await client.query(
+    `insert into bookings (departure_id, lead_passenger_id, channel) values ($1, $2, 'office') returning id`,
+    [departureId, fixture.passengerId]
+  );
+  const payload = bookingPassengerPayload(fixture.passengerId, { status: "confirmed" });
+  const { rows: bpRows } = await client.query(
+    `insert into booking_passengers (
+       booking_id, passenger_id, category, currency, notional_fare, contribution, sponsored, subsidy, status
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
+    [
+      bookingRows[0].id,
+      payload.passenger_id,
+      payload.category,
+      payload.currency,
+      payload.notional_fare,
+      payload.contribution,
+      payload.sponsored,
+      payload.subsidy,
+      payload.status,
+    ]
+  );
+
+  const { rows: address1 } = await client.query(
+    `insert into addresses (line1, postcode, country) values ($1, $2, 'GB') returning id`,
+    [`Test Stop A ${randomUUID().slice(0, 8)}`, "N16 0AA"]
+  );
+  const { rows: stop1 } = await client.query(
+    `insert into operational_stops (departure_id, address_id, stop_type, planned_sequence) values ($1, $2, 'pickup', 0) returning id`,
+    [departureId, address1[0].id]
+  );
+  await client.query(
+    `insert into operational_stop_passengers (operational_stop_id, booking_passenger_id, role) values ($1, $2, 'pickup')`,
+    [stop1[0].id, bpRows[0].id]
+  );
+
+  const { rows: address2 } = await client.query(
+    `insert into addresses (line1, postcode, country) values ($1, $2, 'GB') returning id`,
+    [`Test Stop B ${randomUUID().slice(0, 8)}`, "N16 0AB"]
+  );
+  const { rows: stop2 } = await client.query(
+    `insert into operational_stops (departure_id, address_id, stop_type, planned_sequence) values ($1, $2, 'dropoff', 1) returning id`,
+    [departureId, address2[0].id]
+  );
+
+  return {
+    departureId,
+    stopId: stop1[0].id,
+    outOfRangeStopId: stop2[0].id,
+    bookingPassengerId: bpRows[0].id,
+  };
+}
