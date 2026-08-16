@@ -5,20 +5,24 @@ import { config } from "dotenv";
 
 config({ path: join(__dirname, "..", ".env.local") });
 
-const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  .replace("https://", "")
-  .replace(".supabase.co", "");
-const password = process.env.SUPABASE_DB_PASSWORD!;
-
-// Pooler host/port from Supabase dashboard -> Connect -> Session pooler.
-// Region may differ from Cleano Ops's project - confirm against this
-// project's own dashboard once it exists (see Phase 1 plan open decision
-// #1) rather than assuming eu-west-2.
-const poolerHost =
-  process.env.SUPABASE_POOLER_HOST ?? "aws-1-eu-west-2.pooler.supabase.com";
-const connectionString = `postgresql://postgres.${projectRef}:${encodeURIComponent(
-  password
-)}@${poolerHost}:6543/postgres`;
+// DATABASE_URL (the direct-connection string from Supabase's dashboard ->
+// Connect page) takes priority when set - it needs no region guessing.
+// Falls back to constructing a session-pooler URL, whose hostname is
+// region-specific and NOT guessable from the project URL alone; override
+// SUPABASE_POOLER_HOST if the fallback's assumed region is wrong for this
+// project.
+let connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    .replace("https://", "")
+    .replace(".supabase.co", "");
+  const password = process.env.SUPABASE_DB_PASSWORD!;
+  const poolerHost =
+    process.env.SUPABASE_POOLER_HOST ?? "aws-1-eu-west-2.pooler.supabase.com";
+  connectionString = `postgresql://postgres.${projectRef}:${encodeURIComponent(
+    password
+  )}@${poolerHost}:6543/postgres`;
+}
 
 async function main() {
   const client = new Client({ connectionString });

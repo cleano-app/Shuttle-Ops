@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "shuttle-ops-dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/dev-server.js", "dev", "-p", "3100"],
+      "port": 3100
+    }
+  ]
+}
