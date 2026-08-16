@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Placeholder brand palette — Shuttle Ops naming/branding is still open
+     (build spec §41: candidates Shuttra/Vanto/Carrio/Passar/Bridgen/Overo).
+     Deliberately NOT a recolour of Cleano's green — swap these three once
+     a real name/palette is chosen. */
+  --color-brand-light: #6fb3e0;
+  --color-brand: #2d6ca0;
+  --color-brand-dark: #163a54;
+}
+
+/* No dark-mode variant, matching Cleano Ops's baseline: every screen uses
+   explicit light backgrounds. */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Baseline keyboard-focus ring, brand-coloured, :focus-visible only so it
+   doesn't show for every mouse click. Same convention as Cleano Ops. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* Visually hidden until focused - the skip-to-content link in layout.tsx. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--color-brand-dark);
+  color: white;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0 0 0.5rem 0;
+}
+.skip-link:focus {
+  left: 0;
+}
