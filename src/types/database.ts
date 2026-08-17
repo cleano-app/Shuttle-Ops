@@ -271,6 +271,36 @@ export interface AllocateParcelResult {
   reference: string;
 }
 
+// --- Phase 4 (Money & automation) ---
+
+export type DriverPayType = "hourly" | "per_trip" | "per_day";
+export type DriverExpenseType = "fuel" | "toll" | "crossing" | "parking" | "meal" | "other";
+export type DriverPayStatementStatus = "draft" | "approved" | "paid";
+export type CashTransactionType =
+  | "passenger_contribution"
+  | "deposit"
+  | "luggage_charge"
+  | "parcel_payment"
+  | "cash_refund"
+  | "driver_to_driver_handover"
+  | "driver_to_office_handover"
+  | "opening_float";
+export type CancellationRequestedVia = "phone" | "office" | "online" | "no_show";
+export type CancellationDepositAction = "release" | "retain" | "waive" | "no_deposit";
+export type CancellationFareAction = "refund" | "charge" | "no_charge";
+export type DisruptionType = "vehicle_off_road" | "crossing_cancelled" | "driver_unavailable" | "other";
+export type WaitlistStatus = "waiting" | "offered" | "converted" | "lapsed";
+export type CallChannel = "phone" | "automated";
+export type CallOutcome =
+  | "booked"
+  | "provisional_created"
+  | "waitlisted"
+  | "no_capacity"
+  | "abandoned_at_menu"
+  | "pressed_zero"
+  | "urgent_routed"
+  | "enquiry_only";
+
 // Relationships is always [] here — this project doesn't rely on
 // supabase-js's foreign-table embedding, so every table gets an empty
 // array instead of repeating the field by hand below (same helper as
@@ -287,6 +317,8 @@ interface TablesRaw {
       display_name: string;
       phone: string | null;
       created_at: string;
+      pay_type: DriverPayType | null;
+      pay_rate: number | null;
     };
     Insert: {
       id: string;
@@ -294,6 +326,8 @@ interface TablesRaw {
       display_name: string;
       phone?: string | null;
       created_at?: string;
+      pay_type?: DriverPayType | null;
+      pay_rate?: number | null;
     };
     Update: {
       id?: string;
@@ -301,6 +335,8 @@ interface TablesRaw {
       display_name?: string;
       phone?: string | null;
       created_at?: string;
+      pay_type?: DriverPayType | null;
+      pay_rate?: number | null;
     };
   };
   app_settings: {
@@ -1760,6 +1796,340 @@ interface TablesRaw {
       role?: OperationalStopParcelRole;
     };
   };
+  accounting_rates: {
+    Row: {
+      id: string;
+      effective_from: string;
+      effective_to: string | null;
+      gbp_per_eur: number;
+      set_by_user_id: string;
+      note: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      effective_from: string;
+      effective_to?: string | null;
+      gbp_per_eur: number;
+      set_by_user_id: string;
+      note?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      effective_from?: string;
+      effective_to?: string | null;
+      gbp_per_eur?: number;
+      set_by_user_id?: string;
+      note?: string | null;
+      created_at?: string;
+    };
+  };
+  driver_expenses: {
+    Row: {
+      id: string;
+      driver_id: string;
+      departure_id: string | null;
+      type: DriverExpenseType;
+      amount: number;
+      currency: Currency;
+      receipt_storage_path: string | null;
+      approved_by: string | null;
+      approved_at: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      driver_id: string;
+      departure_id?: string | null;
+      type: DriverExpenseType;
+      amount: number;
+      currency: Currency;
+      receipt_storage_path?: string | null;
+      approved_by?: string | null;
+      approved_at?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      driver_id?: string;
+      departure_id?: string | null;
+      type?: DriverExpenseType;
+      amount?: number;
+      currency?: Currency;
+      receipt_storage_path?: string | null;
+      approved_by?: string | null;
+      approved_at?: string | null;
+      created_at?: string;
+    };
+  };
+  driver_pay_statements: {
+    Row: {
+      id: string;
+      driver_id: string;
+      period_start: string;
+      period_end: string;
+      total_hours: number;
+      total_trips: number;
+      base_pay: number;
+      adjustments: number;
+      expenses_reimbursed: number;
+      total: number;
+      status: DriverPayStatementStatus;
+      approved_by: string | null;
+      generated_at: string;
+    };
+    Insert: {
+      id?: string;
+      driver_id: string;
+      period_start: string;
+      period_end: string;
+      total_hours?: number;
+      total_trips?: number;
+      base_pay?: number;
+      adjustments?: number;
+      expenses_reimbursed?: number;
+      total?: number;
+      status?: DriverPayStatementStatus;
+      approved_by?: string | null;
+      generated_at?: string;
+    };
+    Update: {
+      id?: string;
+      driver_id?: string;
+      period_start?: string;
+      period_end?: string;
+      total_hours?: number;
+      total_trips?: number;
+      base_pay?: number;
+      adjustments?: number;
+      expenses_reimbursed?: number;
+      total?: number;
+      status?: DriverPayStatementStatus;
+      approved_by?: string | null;
+      generated_at?: string;
+    };
+  };
+  cash_transactions: {
+    Row: {
+      id: string;
+      driver_id: string;
+      departure_id: string | null;
+      booking_id: string | null;
+      parcel_id: string | null;
+      transaction_type: CashTransactionType;
+      currency: Currency;
+      amount: number;
+      received_from: string | null;
+      received_at: string;
+      handed_over_to: string | null;
+      handed_over_at: string | null;
+      reconciled_by: string | null;
+      reconciled_at: string | null;
+      notes: string | null;
+    };
+    Insert: {
+      id?: string;
+      driver_id: string;
+      departure_id?: string | null;
+      booking_id?: string | null;
+      parcel_id?: string | null;
+      transaction_type: CashTransactionType;
+      currency: Currency;
+      amount: number;
+      received_from?: string | null;
+      received_at?: string;
+      handed_over_to?: string | null;
+      handed_over_at?: string | null;
+      reconciled_by?: string | null;
+      reconciled_at?: string | null;
+      notes?: string | null;
+    };
+    Update: {
+      id?: string;
+      driver_id?: string;
+      departure_id?: string | null;
+      booking_id?: string | null;
+      parcel_id?: string | null;
+      transaction_type?: CashTransactionType;
+      currency?: Currency;
+      amount?: number;
+      received_from?: string | null;
+      received_at?: string;
+      handed_over_to?: string | null;
+      handed_over_at?: string | null;
+      reconciled_by?: string | null;
+      reconciled_at?: string | null;
+      notes?: string | null;
+    };
+  };
+  cancellations: {
+    Row: {
+      id: string;
+      booking_id: string;
+      booking_passenger_id: string | null;
+      cancelled_at: string;
+      notice_hours: number | null;
+      reason_text: string | null;
+      reason_code: string | null;
+      requested_via: CancellationRequestedVia | null;
+      suggested_outcome: string | null;
+      decided_outcome: string | null;
+      decided_by_user_id: string | null;
+      decided_at: string | null;
+      deposit_action: CancellationDepositAction | null;
+      retained_amount: number | null;
+      fare_action: CancellationFareAction | null;
+      charged_amount: number | null;
+      decision_note: string | null;
+    };
+    Insert: {
+      id?: string;
+      booking_id: string;
+      booking_passenger_id?: string | null;
+      cancelled_at?: string;
+      notice_hours?: number | null;
+      reason_text?: string | null;
+      reason_code?: string | null;
+      requested_via?: CancellationRequestedVia | null;
+      suggested_outcome?: string | null;
+      decided_outcome?: string | null;
+      decided_by_user_id?: string | null;
+      decided_at?: string | null;
+      deposit_action?: CancellationDepositAction | null;
+      retained_amount?: number | null;
+      fare_action?: CancellationFareAction | null;
+      charged_amount?: number | null;
+      decision_note?: string | null;
+    };
+    Update: {
+      id?: string;
+      booking_id?: string;
+      booking_passenger_id?: string | null;
+      cancelled_at?: string;
+      notice_hours?: number | null;
+      reason_text?: string | null;
+      reason_code?: string | null;
+      requested_via?: CancellationRequestedVia | null;
+      suggested_outcome?: string | null;
+      decided_outcome?: string | null;
+      decided_by_user_id?: string | null;
+      decided_at?: string | null;
+      deposit_action?: CancellationDepositAction | null;
+      retained_amount?: number | null;
+      fare_action?: CancellationFareAction | null;
+      charged_amount?: number | null;
+      decision_note?: string | null;
+    };
+  };
+  disruption_events: {
+    Row: {
+      id: string;
+      departure_id: string;
+      type: DisruptionType;
+      reason: string;
+      decided_by: string;
+      occurred_at: string;
+      passengers_moved: number;
+      passengers_unplaced: number;
+      notes: string | null;
+    };
+    Insert: {
+      id?: string;
+      departure_id: string;
+      type: DisruptionType;
+      reason: string;
+      decided_by: string;
+      occurred_at?: string;
+      passengers_moved?: number;
+      passengers_unplaced?: number;
+      notes?: string | null;
+    };
+    Update: {
+      id?: string;
+      departure_id?: string;
+      type?: DisruptionType;
+      reason?: string;
+      decided_by?: string;
+      occurred_at?: string;
+      passengers_moved?: number;
+      passengers_unplaced?: number;
+      notes?: string | null;
+    };
+  };
+  waitlist: {
+    Row: {
+      id: string;
+      departure_id: string;
+      passenger_id: string;
+      seats_wanted: number;
+      luggage_estimate: number;
+      wheelchair_requirement: boolean;
+      created_at: string;
+      notified_at: string | null;
+      expires_at: string | null;
+      status: WaitlistStatus;
+    };
+    Insert: {
+      id?: string;
+      departure_id: string;
+      passenger_id: string;
+      seats_wanted?: number;
+      luggage_estimate?: number;
+      wheelchair_requirement?: boolean;
+      created_at?: string;
+      notified_at?: string | null;
+      expires_at?: string | null;
+      status?: WaitlistStatus;
+    };
+    Update: {
+      id?: string;
+      departure_id?: string;
+      passenger_id?: string;
+      seats_wanted?: number;
+      luggage_estimate?: number;
+      wheelchair_requirement?: boolean;
+      created_at?: string;
+      notified_at?: string | null;
+      expires_at?: string | null;
+      status?: WaitlistStatus;
+    };
+  };
+  call_logs: {
+    Row: {
+      id: string;
+      from_number: string | null;
+      matched_passenger_id: string | null;
+      operator_id: string | null;
+      started_at: string;
+      duration: number | null;
+      channel: CallChannel;
+      outcome: CallOutcome;
+      notes: string | null;
+    };
+    Insert: {
+      id?: string;
+      from_number?: string | null;
+      matched_passenger_id?: string | null;
+      operator_id?: string | null;
+      started_at?: string;
+      duration?: number | null;
+      channel?: CallChannel;
+      outcome: CallOutcome;
+      notes?: string | null;
+    };
+    Update: {
+      id?: string;
+      from_number?: string | null;
+      matched_passenger_id?: string | null;
+      operator_id?: string | null;
+      started_at?: string;
+      duration?: number | null;
+      channel?: CallChannel;
+      outcome?: CallOutcome;
+      notes?: string | null;
+    };
+  };
 }
 
 export interface Database {
@@ -1900,6 +2270,14 @@ export interface Database {
       record_parcel_failed: {
         Args: { p_operational_stop_parcel_id: string; p_reason: string };
         Returns: { status: string };
+      };
+      departure_has_unreconciled_cash: {
+        Args: { p_departure_id: string };
+        Returns: boolean;
+      };
+      recompute_leg_timings: {
+        Args: Record<string, never>;
+        Returns: number;
       };
     };
   };

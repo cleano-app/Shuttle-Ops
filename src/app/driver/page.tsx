@@ -24,11 +24,16 @@ export default async function DriverHomePage() {
     <div className="flex min-h-screen flex-col bg-slate-50">
       <header className="flex items-center justify-between border-b bg-white p-4">
         <span className="text-lg font-semibold text-slate-900">Shuttle Ops</span>
-        <form action={logout}>
-          <button type="submit" className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700">
-            Sign out
-          </button>
-        </form>
+        <div className="flex items-center gap-2">
+          <Link href="/driver/me" className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700">
+            Me
+          </Link>
+          <form action={logout}>
+            <button type="submit" className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700">
+              Sign out
+            </button>
+          </form>
+        </div>
       </header>
 
       <div className="flex-1 p-4">

@@ -21,7 +21,12 @@ config({ path: join(__dirname, "..", ".env.local") });
 // vehicle_checks/vehicle_defects/fleet_tasks/vehicle_documents/
 // vehicle_maintenance do NOT cascade from departures or vehicles
 // (deliberately - see each migration's own comment on why), so those are
-// deleted explicitly first.
+// deleted explicitly first. Phase 4 added the same non-cascading pattern
+// for cash_transactions (departure_id/booking_id/parcel_id),
+// driver_expenses (departure_id), cancellations (booking_id),
+// disruption_events (departure_id) and waitlist (departure_id) - all
+// deleted explicitly here too, before their parent departures/bookings/
+// parcels rows.
 async function main() {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
@@ -40,6 +45,17 @@ async function main() {
     const passengerIds = passengers.map((p) => p.id);
 
     if (departureIds.length > 0) {
+      await client.query(
+        `delete from cash_transactions
+         where departure_id = any($1)
+            or booking_id in (select id from bookings where departure_id = any($1))
+            or parcel_id in (select id from parcels where departure_id = any($1))`,
+        [departureIds]
+      );
+      await client.query(`delete from driver_expenses where departure_id = any($1)`, [departureIds]);
+      await client.query(`delete from cancellations where booking_id in (select id from bookings where departure_id = any($1))`, [departureIds]);
+      await client.query(`delete from disruption_events where departure_id = any($1)`, [departureIds]);
+      await client.query(`delete from waitlist where departure_id = any($1)`, [departureIds]);
       await client.query(`delete from booking_passengers where booking_id in (select id from bookings where departure_id = any($1))`, [departureIds]);
       await client.query(`delete from parcels where departure_id = any($1)`, [departureIds]);
       await client.query(`delete from driver_duty_events where departure_id = any($1)`, [departureIds]);

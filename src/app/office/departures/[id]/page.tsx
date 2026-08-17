@@ -3,7 +3,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { transitionDepartureStatus, updateReleasedSeats } from "@/app/actions/departures";
 import { assignVehicleToDeparture } from "@/app/actions/vehicles";
-import type { DepartureStatus } from "@/types/database";
+import { listCashForDeparture, reconcileAllForDeparture } from "@/app/actions/cash";
+import { listWaitlistForDeparture, offerNextWaiting } from "@/app/actions/waitlist";
+import { reaccommodateDeparture } from "@/app/actions/disruption";
+import type { DepartureStatus, DisruptionType } from "@/types/database";
 
 const NEXT_STATUS: Partial<Record<DepartureStatus, DepartureStatus>> = {
   draft: "published",
@@ -20,7 +23,7 @@ export default async function DepartureDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: departure }, { data: summary }, { data: vehicles }, { data: assigned }] =
+  const [{ data: departure }, { data: summary }, { data: vehicles }, { data: assigned }, { transactions: cash }, { entries: waitlistEntries }, { data: otherDepartures }] =
     await Promise.all([
       supabase.from("departures").select("*, routes(name)").eq("id", id).single(),
       supabase.from("departure_capacity_summary").select("*").eq("departure_id", id).maybeSingle(),
@@ -29,6 +32,14 @@ export default async function DepartureDetailPage({
         .from("departure_vehicles")
         .select("id, vehicle_id, seats_capacity, hold_capacity_units, wheelchair_capacity, vehicles(registration)")
         .eq("departure_id", id),
+      listCashForDeparture(id),
+      listWaitlistForDeparture(id),
+      supabase
+        .from("departures")
+        .select("id, direction, depart_at, routes(name)")
+        .neq("id", id)
+        .in("status", ["draft", "published", "boarding"])
+        .order("depart_at", { ascending: true }),
     ]);
 
   if (!departure) notFound();
@@ -58,6 +69,29 @@ export default async function DepartureDetailPage({
     const vehicleId = String(formData.get("vehicle_id") ?? "");
     if (!vehicleId) return;
     await assignVehicleToDeparture({ departure_id: id, vehicle_id: vehicleId });
+  }
+
+  async function reconcileCash() {
+    "use server";
+    await reconcileAllForDeparture(id);
+  }
+
+  async function offerWaitlist() {
+    "use server";
+    await offerNextWaiting(id);
+  }
+
+  async function reaccommodate(formData: FormData) {
+    "use server";
+    const targetDepartureId = String(formData.get("target_departure_id") ?? "");
+    const reason = String(formData.get("reason") ?? "").trim();
+    if (!targetDepartureId || !reason) return;
+    await reaccommodateDeparture({
+      sourceDepartureId: id,
+      targetDepartureId,
+      type: String(formData.get("type") ?? "other") as DisruptionType,
+      reason,
+    });
   }
 
   return (
@@ -177,6 +211,93 @@ export default async function DepartureDetailPage({
           </button>
         </form>
       </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-medium text-slate-900">Cash</h2>
+          <Link href={`/office/departures/${id}/reconciliation`} className="text-sm font-medium text-brand-dark underline">
+            Full reconciliation report →
+          </Link>
+        </div>
+        <ul className="mb-3 space-y-1 text-sm">
+          {(cash ?? []).map((c) => (
+            <li key={c.id} className={c.reconciled_at ? "text-slate-600" : "font-medium text-amber-700"}>
+              {c.transaction_type} — {c.currency === "GBP" ? "£" : "€"}
+              {c.amount} {c.reconciled_at ? "· reconciled" : "· unreconciled"}
+            </li>
+          ))}
+          {(!cash || cash.length === 0) && <li className="text-slate-500">No cash recorded yet.</li>}
+        </ul>
+        {(cash ?? []).some((c) => !c.reconciled_at) && (
+          <form action={reconcileCash}>
+            <button type="submit" className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              Reconcile all
+            </button>
+          </form>
+        )}
+        <p className="mt-2 text-xs text-slate-500">Unreconciled cash blocks this departure from reaching completed.</p>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <h2 className="mb-3 font-medium text-slate-900">Waitlist</h2>
+        <ul className="mb-3 space-y-1 text-sm">
+          {(waitlistEntries ?? []).map((w) => {
+            const name = (w as unknown as { passengers?: { full_name?: string } }).passengers?.full_name;
+            return (
+              <li key={w.id}>
+                {name ?? "Passenger"} — {w.seats_wanted} seat(s) — {w.status}
+              </li>
+            );
+          })}
+          {(!waitlistEntries || waitlistEntries.length === 0) && <li className="text-slate-500">Nobody waiting.</li>}
+        </ul>
+        {(waitlistEntries ?? []).some((w) => w.status === "waiting") && (
+          <form action={offerWaitlist}>
+            <button type="submit" className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              Offer next who fits
+            </button>
+          </form>
+        )}
+      </section>
+
+      {departure.status !== "cancelled" && departure.status !== "completed" && (otherDepartures ?? []).length > 0 && (
+        <section className="rounded-lg border border-red-200 bg-white p-4">
+          <h2 className="mb-2 font-medium text-slate-900">Disruption — re-accommodate</h2>
+          <p className="mb-3 text-sm text-slate-500">
+            Moves every passenger on this departure to a target departure, running the full capacity check for
+            each. Anyone who doesn&apos;t fit goes onto the target&apos;s waitlist instead of being dropped. This
+            departure is then cancelled.
+          </p>
+          <form action={reaccommodate} className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Reason</label>
+              <select name="type" className="rounded border border-slate-300 px-2 py-2 text-sm">
+                <option value="vehicle_off_road">Vehicle off the road</option>
+                <option value="crossing_cancelled">Crossing cancelled</option>
+                <option value="driver_unavailable">Driver unavailable</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Move to</label>
+              <select name="target_departure_id" className="rounded border border-slate-300 px-2 py-2 text-sm">
+                {(otherDepartures ?? []).map((d) => {
+                  const rn = (d as unknown as { routes?: { name?: string } }).routes?.name ?? "Route";
+                  return (
+                    <option key={d.id} value={d.id}>
+                      {rn} · {d.direction} · {new Date(d.depart_at).toLocaleDateString("en-GB")}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            <input name="reason" placeholder="Details" required className="min-w-[180px] flex-1 rounded border border-slate-300 px-3 py-2 text-sm" />
+            <button type="submit" className="rounded border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50">
+              Re-accommodate everyone
+            </button>
+          </form>
+        </section>
+      )}
     </div>
   );
 }

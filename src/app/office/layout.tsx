@@ -12,8 +12,12 @@ const NAV_ITEMS = [
   { href: "/office/vehicles", label: "Vehicles" },
   { href: "/office/fleet", label: "Fleet" },
   { href: "/office/parcels", label: "Parcels" },
+  { href: "/office/cancellations", label: "Cancellations" },
+  { href: "/office/driver-pay", label: "Driver Pay" },
+  { href: "/office/reports", label: "Reports" },
   { href: "/office/tariffs", label: "Tariffs" },
   { href: "/office/areas", label: "Areas" },
+  { href: "/office/accounting", label: "Accounting" },
 ];
 
 export default async function OfficeLayout({

@@ -228,6 +228,12 @@ export function DriverRouteScreen({
         >
           Vehicle check
         </Link>
+        <Link
+          href="/driver/me"
+          className="shrink-0 rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 active:bg-slate-100"
+        >
+          Me
+        </Link>
       </div>
 
       {crossingReference && (

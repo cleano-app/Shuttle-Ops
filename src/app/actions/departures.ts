@@ -190,6 +190,21 @@ export async function transitionDepartureStatus(
     };
   }
 
+  // Build spec §26: "Unreconciled cash blocks a departure from reaching
+  // completed." Checked here rather than as a DB constraint, since it's a
+  // cross-table condition tied to one specific transition, not a property
+  // of the departures row itself.
+  if (to === "completed") {
+    const { data: hasUnreconciled, error: cashCheckError } = await supabase.rpc(
+      "departure_has_unreconciled_cash",
+      { p_departure_id: id }
+    );
+    if (cashCheckError) return { error: cashCheckError.message };
+    if (hasUnreconciled) {
+      return { error: "This departure has unreconciled cash — reconcile it before marking completed." };
+    }
+  }
+
   const { error } = await supabase.from("departures").update({ status: to }).eq("id", id);
   if (error) return { error: error.message };
 
