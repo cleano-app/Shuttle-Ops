@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   arriveAtStop,
@@ -8,6 +9,9 @@ import {
   markPassengerBoarded,
   logDutyEvent,
   getMyStopManifest,
+  collectParcel,
+  deliverParcel,
+  reportParcelFailed,
 } from "@/app/actions/driver";
 import { enqueueAction, registerExecutor, initOfflineQueue, type QueuedAction } from "@/lib/offline/queue";
 import { useOfflineQueueStatus } from "@/lib/offline/useOfflineQueue";
@@ -86,6 +90,18 @@ export function DriverRouteScreen({
             clientOccurredAt: new Date().toISOString(),
           });
         }
+        case "collect_parcel": {
+          const p = action.payload as { operationalStopParcelId: string; clientId: string };
+          return collectParcel(p.operationalStopParcelId, p.clientId);
+        }
+        case "deliver_parcel": {
+          const p = action.payload as { operationalStopParcelId: string; signatureName: string | null };
+          return deliverParcel({ operationalStopParcelId: p.operationalStopParcelId, signatureName: p.signatureName });
+        }
+        case "fail_parcel": {
+          const p = action.payload as { operationalStopParcelId: string; reason: string };
+          return reportParcelFailed(p.operationalStopParcelId, p.reason);
+        }
         default:
           return { error: "Unknown action type" };
       }
@@ -156,6 +172,43 @@ export function DriverRouteScreen({
     enqueueAction("duty_event", { clientId: crypto.randomUUID(), eventType, odometer: null, note: null });
   }
 
+  function handleCollectParcel(operationalStopParcelId: string) {
+    enqueueAction("collect_parcel", { operationalStopParcelId, clientId: crypto.randomUUID() });
+    setManifest((m) => ({
+      stops: m.stops.map((s) => ({
+        ...s,
+        parcels: s.parcels.map((p) =>
+          p.operational_stop_parcel_id === operationalStopParcelId ? { ...p, status: "onboard" } : p
+        ),
+      })),
+    }));
+  }
+
+  function handleDeliverParcel(operationalStopParcelId: string) {
+    enqueueAction("deliver_parcel", { operationalStopParcelId, signatureName: null });
+    setManifest((m) => ({
+      stops: m.stops.map((s) => ({
+        ...s,
+        parcels: s.parcels.map((p) =>
+          p.operational_stop_parcel_id === operationalStopParcelId ? { ...p, status: "delivered" } : p
+        ),
+      })),
+    }));
+  }
+
+  function handleFailParcel(operationalStopParcelId: string, role: "collection" | "delivery") {
+    enqueueAction("fail_parcel", { operationalStopParcelId, reason: "Reported by driver" });
+    const failedStatus = role === "collection" ? "failed_collection" : "failed_delivery";
+    setManifest((m) => ({
+      stops: m.stops.map((s) => ({
+        ...s,
+        parcels: s.parcels.map((p) =>
+          p.operational_stop_parcel_id === operationalStopParcelId ? { ...p, status: failedStatus } : p
+        ),
+      })),
+    }));
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
       {/* Duty state bar */}
@@ -169,6 +222,12 @@ export function DriverRouteScreen({
             {e.label}
           </button>
         ))}
+        <Link
+          href="/driver/check"
+          className="shrink-0 rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 active:bg-slate-100"
+        >
+          Vehicle check
+        </Link>
       </div>
 
       {crossingReference && (
@@ -235,6 +294,54 @@ export function DriverRouteScreen({
                       </button>
                     </li>
                   ))}
+                </ul>
+              </div>
+            )}
+
+            {currentStop.parcels.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-sm font-semibold text-slate-700">Parcels</p>
+                <ul className="space-y-2">
+                  {currentStop.parcels.map((p) => {
+                    const done = p.status === "delivered" || p.status === "onboard" || p.status.startsWith("failed");
+                    return (
+                      <li
+                        key={p.operational_stop_parcel_id}
+                        className="rounded border border-slate-200 p-2"
+                      >
+                        <p className="font-medium text-slate-900">
+                          {p.reference} — {p.contact_name}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          {p.size_category} · qty {p.quantity} {p.contact_phone && `· ${p.contact_phone}`}
+                        </p>
+                        {p.special_instructions && (
+                          <p className="text-sm text-amber-700">{p.special_instructions}</p>
+                        )}
+                        {!done && (
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              onClick={() =>
+                                p.role === "collection"
+                                  ? handleCollectParcel(p.operational_stop_parcel_id)
+                                  : handleDeliverParcel(p.operational_stop_parcel_id)
+                              }
+                              className="flex-1 rounded bg-green-600 py-2 text-sm font-medium text-white"
+                            >
+                              {p.role === "collection" ? "Collected" : "Delivered"}
+                            </button>
+                            <button
+                              onClick={() => handleFailParcel(p.operational_stop_parcel_id, p.role)}
+                              className="rounded border border-red-300 px-3 py-2 text-sm font-medium text-red-700"
+                            >
+                              Problem
+                            </button>
+                          </div>
+                        )}
+                        {done && <p className="mt-1 text-sm text-green-700">{p.status}</p>}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}

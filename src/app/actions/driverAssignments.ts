@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth/session";
+import { assertVehicleAssignable } from "@/app/actions/vehicles";
 
 export interface ActionResult {
   error?: string;
@@ -16,7 +17,8 @@ function isDispatcherOrAbove(role: string) {
 /**
  * Build spec §22: "Driver X drove Vehicle Y from Stop A through Stop B."
  * from/to stop sequence left null covers the whole departure - the common
- * single-driver case.
+ * single-driver case. Also enforces §27's "unavailable vehicle needs Admin
+ * override + reason" rule, same as assignVehicleToDeparture.
  */
 export async function assignDriver(input: {
   departure_id: string;
@@ -25,6 +27,7 @@ export async function assignDriver(input: {
   role?: "driver" | "co_driver";
   from_stop_sequence?: number | null;
   to_stop_sequence?: number | null;
+  override_reason?: string | null;
 }): Promise<ActionResult & { id?: string }> {
   const session = await getSession();
   if (!session || !isDispatcherOrAbove(session.role)) {
@@ -32,9 +35,27 @@ export async function assignDriver(input: {
   }
 
   const supabase = await createClient();
+  const { data: vehicle, error: vehicleError } = await supabase
+    .from("vehicles")
+    .select("status")
+    .eq("id", input.vehicle_id)
+    .single();
+  if (vehicleError || !vehicle) return { error: "Vehicle not found." };
+
+  const blockReason = await assertVehicleAssignable(
+    vehicle.status,
+    session.role === "admin",
+    input.override_reason
+  );
+  if (blockReason) return { error: blockReason };
+
   const { data, error } = await supabase
     .from("driver_assignments")
-    .insert({ ...input, assigned_by: session.userId })
+    .insert({
+      ...input,
+      assigned_by: session.userId,
+      override_reason: vehicle.status !== "available" ? input.override_reason : null,
+    })
     .select("id")
     .single();
   if (error) return { error: error.message };

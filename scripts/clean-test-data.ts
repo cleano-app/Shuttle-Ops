@@ -8,14 +8,20 @@ config({ path: join(__dirname, "..", ".env.local") });
 // disposable per-run database yet (Phase 1 plan's open decision #5) — it
 // runs against this same project, and every run's scratch rows
 // (identifiable by the "Test " name prefix seedFixture/seedDeparture/
-// seedDispatchScenario always use) accumulate here instead of being torn
-// down. Confirmed this became visible clutter in the real Office UI
-// (dozens of "Test Route xxxxxxxx" departures on the Dispatch page).
+// seedDispatchScenario always use, and the "TEST-" vehicle registration
+// prefix) accumulate here instead of being torn down. Confirmed this
+// became visible clutter in the real Office UI once (dozens of stray
+// "Test Route" departures on the Dispatch page).
+//
 // Run this after a test run, or periodically, to sweep it out. Deletion
-// order matters — departures cascade to operational_stops/
+// order matters - departures cascade to operational_stops/
 // driver_assignments/handovers/departure_vehicles, and booking_passengers
-// cascades to deposits/waivers, but bookings and trips do NOT cascade
-// from departures/passengers, so those are deleted explicitly first.
+// cascades to deposits/waivers, and parcels cascades to
+// operational_stop_parcels, but bookings/trips/parcels/driver_duty_events/
+// vehicle_checks/vehicle_defects/fleet_tasks/vehicle_documents/
+// vehicle_maintenance do NOT cascade from departures or vehicles
+// (deliberately - see each migration's own comment on why), so those are
+// deleted explicitly first.
 async function main() {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
@@ -27,22 +33,30 @@ async function main() {
     );
     const departureIds = departures.map((d) => d.id);
 
+    const { rows: vehicles } = await client.query(`select id from vehicles where registration like 'TEST-%'`);
+    const vehicleIds = vehicles.map((v) => v.id);
+
     const { rows: passengers } = await client.query(`select id from passengers where full_name like 'Test Passenger %'`);
     const passengerIds = passengers.map((p) => p.id);
 
     if (departureIds.length > 0) {
       await client.query(`delete from booking_passengers where booking_id in (select id from bookings where departure_id = any($1))`, [departureIds]);
+      await client.query(`delete from parcels where departure_id = any($1)`, [departureIds]);
+      await client.query(`delete from driver_duty_events where departure_id = any($1)`, [departureIds]);
+    }
+    if (vehicleIds.length > 0) {
+      await client.query(`delete from vehicle_checks where vehicle_id = any($1)`, [vehicleIds]);
+      await client.query(`delete from vehicle_defects where vehicle_id = any($1)`, [vehicleIds]);
+      await client.query(`delete from fleet_tasks where vehicle_id = any($1)`, [vehicleIds]);
+      await client.query(`delete from vehicle_documents where vehicle_id = any($1)`, [vehicleIds]);
+      await client.query(`delete from vehicle_maintenance where vehicle_id = any($1)`, [vehicleIds]);
+      await client.query(`delete from driver_duty_events where vehicle_id = any($1)`, [vehicleIds]);
     }
     if (passengerIds.length > 0) {
       await client.query(`delete from trips where lead_passenger_id = any($1)`, [passengerIds]);
     }
     if (departureIds.length > 0) {
       await client.query(`delete from bookings where departure_id = any($1)`, [departureIds]);
-      // driver_duty_events.departure_id has no cascade (it's an append-
-      // only log, intentionally — see 0026's own comment), so test rows
-      // logged against a test departure by the driver-function tests
-      // block the departure delete unless removed explicitly first.
-      await client.query(`delete from driver_duty_events where departure_id = any($1)`, [departureIds]);
       await client.query(`delete from departures where id = any($1)`, [departureIds]);
     }
 

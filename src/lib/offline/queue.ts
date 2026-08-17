@@ -8,7 +8,15 @@
 // key (client_id on driver_duty_events, p_client_id on the stop-status
 // RPCs), so replaying after a reconnect never double-records anything.
 
-export type QueuedActionType = "arrive_stop" | "depart_stop" | "problem_stop" | "board_passenger" | "duty_event";
+export type QueuedActionType =
+  | "arrive_stop"
+  | "depart_stop"
+  | "problem_stop"
+  | "board_passenger"
+  | "duty_event"
+  | "collect_parcel"
+  | "deliver_parcel"
+  | "fail_parcel";
 
 export interface QueuedAction {
   id: string;

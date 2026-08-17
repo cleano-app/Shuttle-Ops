@@ -14,6 +14,24 @@ function isDispatcherOrAbove(role: string) {
   return role === "admin" || role === "office" || role === "dispatcher";
 }
 
+/**
+ * Build spec §27: "An unavailable vehicle cannot be assigned to new work
+ * without Admin override and a recorded reason." Shared by both
+ * assignVehicleToDeparture (below) and assignDriver
+ * (src/app/actions/driverAssignments.ts) — the two places a vehicle
+ * actually gets put to work.
+ */
+export async function assertVehicleAssignable(
+  vehicleStatus: string,
+  isAdmin: boolean,
+  overrideReason: string | null | undefined
+): Promise<string | null> {
+  if (vehicleStatus === "available") return null;
+  if (isAdmin && overrideReason?.trim()) return null;
+  if (isAdmin) return "This vehicle is not available - provide an override reason to assign it anyway.";
+  return "This vehicle is not available. Only Admin can override this, with a recorded reason.";
+}
+
 export async function createVehicle(input: {
   registration: string;
   make_model?: string | null;
@@ -89,6 +107,7 @@ export async function assignVehicleToDeparture(input: {
   departure_id: string;
   vehicle_id: string;
   sequence?: number;
+  override_reason?: string | null;
 }): Promise<ActionResult> {
   const session = await getSession();
   if (!session || !isDispatcherOrAbove(session.role)) {
@@ -98,11 +117,18 @@ export async function assignVehicleToDeparture(input: {
   const supabase = await createClient();
   const { data: vehicle, error: vehicleError } = await supabase
     .from("vehicles")
-    .select("seat_capacity, hold_capacity_units, wheelchair_capacity")
+    .select("seat_capacity, hold_capacity_units, wheelchair_capacity, status")
     .eq("id", input.vehicle_id)
     .single();
 
   if (vehicleError || !vehicle) return { error: "Vehicle not found." };
+
+  const blockReason = await assertVehicleAssignable(
+    vehicle.status,
+    session.role === "admin",
+    input.override_reason
+  );
+  if (blockReason) return { error: blockReason };
 
   const { error } = await supabase.from("departure_vehicles").insert({
     departure_id: input.departure_id,
@@ -111,6 +137,7 @@ export async function assignVehicleToDeparture(input: {
     hold_capacity_units: vehicle.hold_capacity_units,
     wheelchair_capacity: vehicle.wheelchair_capacity,
     sequence: input.sequence ?? 0,
+    override_reason: vehicle.status !== "available" ? input.override_reason : null,
   });
   if (error) return { error: error.message };
 

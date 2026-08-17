@@ -198,11 +198,77 @@ export interface DriverManifestStop {
   locked: boolean;
   driver_notes: string | null;
   passengers: DriverManifestPassenger[];
+  parcels: DriverManifestParcel[];
+}
+
+/** One parcel's safe fields within get_driver_stop_manifest()'s output —
+ * contact_name/contact_phone are already resolved to whichever side
+ * (sender for collection, recipient for delivery) is relevant at this
+ * specific stop, per 0038's comment. */
+export interface DriverManifestParcel {
+  operational_stop_parcel_id: string;
+  parcel_id: string;
+  reference: string;
+  role: "collection" | "delivery";
+  contact_name: string;
+  contact_phone: string | null;
+  size_category: ParcelSizeCategory;
+  quantity: number;
+  description: string | null;
+  special_instructions: string | null;
+  status: ParcelStatus;
 }
 
 /** Return shape of get_driver_stop_manifest(p_departure_id). */
 export interface DriverStopManifest {
   stops: DriverManifestStop[];
+}
+
+// --- Phase 3 (Fleet & parcels) ---
+
+export type FleetTaskType = "document_expiry" | "defect" | "maintenance_due";
+export type FleetTaskStatus = "open" | "in_progress" | "resolved";
+export type FleetTaskCreatedFrom = "document_expiry_sweep" | "check_defect" | "manual_defect" | "maintenance_schedule";
+export type VehicleDocType = "mot" | "insurance" | "service" | "safety_inspection" | "tachograph" | "other";
+export type VehicleCheckType = "pre_trip" | "post_trip";
+export type VehicleCheckResult = "pass" | "advisory_defect" | "critical_defect";
+export type DefectSeverity = "minor" | "major" | "critical";
+export type DefectStatus = "open" | "in_progress" | "resolved";
+export type ParcelSizeCategory = "small" | "medium" | "large" | "oversize";
+export type ParcelPaymentStatus = "pending" | "paid" | "refunded";
+export type ParcelStatus =
+  | "booked"
+  | "collection_due"
+  | "collected"
+  | "onboard"
+  | "delivery_due"
+  | "delivered"
+  | "cancelled"
+  | "failed_collection"
+  | "failed_delivery";
+export type OperationalStopParcelRole = "collection" | "delivery";
+
+export interface ParcelBookingInput {
+  sender_name: string;
+  sender_phone?: string | null;
+  sender_address_id?: string | null;
+  recipient_name: string;
+  recipient_phone?: string | null;
+  recipient_address_id?: string | null;
+  quantity?: number;
+  size_category: ParcelSizeCategory;
+  units_consumed?: number;
+  description?: string | null;
+  special_instructions?: string | null;
+  prohibited_items_declared: boolean;
+  price: number;
+  currency: Currency;
+  created_by?: string | null;
+}
+
+export interface AllocateParcelResult {
+  parcel_id: string;
+  reference: string;
 }
 
 // Relationships is always [] here — this project doesn't rely on
@@ -516,6 +582,7 @@ interface TablesRaw {
       wheelchair_capacity: number;
       sequence: number;
       created_at: string;
+      override_reason: string | null;
     };
     Insert: {
       id?: string;
@@ -526,6 +593,7 @@ interface TablesRaw {
       wheelchair_capacity?: number;
       sequence?: number;
       created_at?: string;
+      override_reason?: string | null;
     };
     Update: {
       id?: string;
@@ -536,6 +604,7 @@ interface TablesRaw {
       wheelchair_capacity?: number;
       sequence?: number;
       created_at?: string;
+      override_reason?: string | null;
     };
   };
   passengers: {
@@ -1127,6 +1196,7 @@ interface TablesRaw {
       accepted_at: string | null;
       status: DriverAssignmentStatus;
       created_at: string;
+      override_reason: string | null;
     };
     Insert: {
       id?: string;
@@ -1141,6 +1211,7 @@ interface TablesRaw {
       accepted_at?: string | null;
       status?: DriverAssignmentStatus;
       created_at?: string;
+      override_reason?: string | null;
     };
     Update: {
       id?: string;
@@ -1155,6 +1226,7 @@ interface TablesRaw {
       accepted_at?: string | null;
       status?: DriverAssignmentStatus;
       created_at?: string;
+      override_reason?: string | null;
     };
   };
   operational_stops: {
@@ -1339,6 +1411,355 @@ interface TablesRaw {
       created_at?: string;
     };
   };
+  fleet_tasks: {
+    Row: {
+      id: string;
+      vehicle_id: string;
+      task_type: FleetTaskType;
+      title: string;
+      description: string | null;
+      due_date: string | null;
+      status: FleetTaskStatus;
+      created_from: FleetTaskCreatedFrom;
+      source_document_id: string | null;
+      source_defect_id: string | null;
+      created_at: string;
+      resolved_at: string | null;
+      resolved_by: string | null;
+    };
+    Insert: {
+      id?: string;
+      vehicle_id: string;
+      task_type: FleetTaskType;
+      title: string;
+      description?: string | null;
+      due_date?: string | null;
+      status?: FleetTaskStatus;
+      created_from: FleetTaskCreatedFrom;
+      source_document_id?: string | null;
+      source_defect_id?: string | null;
+      created_at?: string;
+      resolved_at?: string | null;
+      resolved_by?: string | null;
+    };
+    Update: {
+      id?: string;
+      vehicle_id?: string;
+      task_type?: FleetTaskType;
+      title?: string;
+      description?: string | null;
+      due_date?: string | null;
+      status?: FleetTaskStatus;
+      created_from?: FleetTaskCreatedFrom;
+      source_document_id?: string | null;
+      source_defect_id?: string | null;
+      created_at?: string;
+      resolved_at?: string | null;
+      resolved_by?: string | null;
+    };
+  };
+  vehicle_documents: {
+    Row: {
+      id: string;
+      vehicle_id: string;
+      doc_type: VehicleDocType;
+      reference: string | null;
+      issued_at: string | null;
+      expires_at: string | null;
+      storage_path: string | null;
+      uploaded_by: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      vehicle_id: string;
+      doc_type: VehicleDocType;
+      reference?: string | null;
+      issued_at?: string | null;
+      expires_at?: string | null;
+      storage_path?: string | null;
+      uploaded_by?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      vehicle_id?: string;
+      doc_type?: VehicleDocType;
+      reference?: string | null;
+      issued_at?: string | null;
+      expires_at?: string | null;
+      storage_path?: string | null;
+      uploaded_by?: string | null;
+      created_at?: string;
+    };
+  };
+  vehicle_checks: {
+    Row: {
+      id: string;
+      vehicle_id: string;
+      driver_id: string;
+      departure_id: string | null;
+      check_type: VehicleCheckType;
+      completed_at: string;
+      items: unknown;
+      result: VehicleCheckResult;
+      signature: string | null;
+      notes: string | null;
+    };
+    Insert: {
+      id?: string;
+      vehicle_id: string;
+      driver_id: string;
+      departure_id?: string | null;
+      check_type: VehicleCheckType;
+      completed_at?: string;
+      items?: unknown;
+      result: VehicleCheckResult;
+      signature?: string | null;
+      notes?: string | null;
+    };
+    Update: {
+      id?: string;
+      vehicle_id?: string;
+      driver_id?: string;
+      departure_id?: string | null;
+      check_type?: VehicleCheckType;
+      completed_at?: string;
+      items?: unknown;
+      result?: VehicleCheckResult;
+      signature?: string | null;
+      notes?: string | null;
+    };
+  };
+  vehicle_defects: {
+    Row: {
+      id: string;
+      vehicle_id: string;
+      reported_by: string;
+      reported_at: string;
+      severity: DefectSeverity;
+      description: string;
+      photo_path: string | null;
+      status: DefectStatus;
+      assigned_to: string | null;
+      resolved_at: string | null;
+      resolution_note: string | null;
+    };
+    Insert: {
+      id?: string;
+      vehicle_id: string;
+      reported_by: string;
+      reported_at?: string;
+      severity: DefectSeverity;
+      description: string;
+      photo_path?: string | null;
+      status?: DefectStatus;
+      assigned_to?: string | null;
+      resolved_at?: string | null;
+      resolution_note?: string | null;
+    };
+    Update: {
+      id?: string;
+      vehicle_id?: string;
+      reported_by?: string;
+      reported_at?: string;
+      severity?: DefectSeverity;
+      description?: string;
+      photo_path?: string | null;
+      status?: DefectStatus;
+      assigned_to?: string | null;
+      resolved_at?: string | null;
+      resolution_note?: string | null;
+    };
+  };
+  vehicle_maintenance: {
+    Row: {
+      id: string;
+      vehicle_id: string;
+      type: string;
+      scheduled_at: string | null;
+      completed_at: string | null;
+      mileage: number | null;
+      supplier: string | null;
+      cost: number | null;
+      currency: Currency | null;
+      notes: string | null;
+      document_path: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      vehicle_id: string;
+      type: string;
+      scheduled_at?: string | null;
+      completed_at?: string | null;
+      mileage?: number | null;
+      supplier?: string | null;
+      cost?: number | null;
+      currency?: Currency | null;
+      notes?: string | null;
+      document_path?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      vehicle_id?: string;
+      type?: string;
+      scheduled_at?: string | null;
+      completed_at?: string | null;
+      mileage?: number | null;
+      supplier?: string | null;
+      cost?: number | null;
+      currency?: Currency | null;
+      notes?: string | null;
+      document_path?: string | null;
+      created_at?: string;
+    };
+  };
+  parcel_tariffs: {
+    Row: {
+      id: string;
+      route_id: string;
+      size_category: ParcelSizeCategory;
+      price_gbp: number;
+      price_eur: number;
+      capacity_units: number;
+      active: boolean;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      route_id: string;
+      size_category: ParcelSizeCategory;
+      price_gbp: number;
+      price_eur: number;
+      capacity_units?: number;
+      active?: boolean;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      route_id?: string;
+      size_category?: ParcelSizeCategory;
+      price_gbp?: number;
+      price_eur?: number;
+      capacity_units?: number;
+      active?: boolean;
+      created_at?: string;
+    };
+  };
+  parcels: {
+    Row: {
+      id: string;
+      reference: string;
+      departure_id: string;
+      departure_vehicle_id: string | null;
+      sender_name: string;
+      sender_phone: string | null;
+      sender_address_id: string | null;
+      recipient_name: string;
+      recipient_phone: string | null;
+      recipient_address_id: string | null;
+      quantity: number;
+      size_category: ParcelSizeCategory;
+      units_consumed: number;
+      description: string | null;
+      special_instructions: string | null;
+      prohibited_items_declared: boolean;
+      price: number;
+      currency: Currency;
+      payment_status: ParcelPaymentStatus;
+      payment_ref: string | null;
+      status: ParcelStatus;
+      collected_at: string | null;
+      delivered_at: string | null;
+      proof_photo_path: string | null;
+      proof_signature_name: string | null;
+      failure_reason: string | null;
+      created_by: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      reference?: string;
+      departure_id: string;
+      departure_vehicle_id?: string | null;
+      sender_name: string;
+      sender_phone?: string | null;
+      sender_address_id?: string | null;
+      recipient_name: string;
+      recipient_phone?: string | null;
+      recipient_address_id?: string | null;
+      quantity?: number;
+      size_category: ParcelSizeCategory;
+      units_consumed?: number;
+      description?: string | null;
+      special_instructions?: string | null;
+      prohibited_items_declared: boolean;
+      price?: number;
+      currency: Currency;
+      payment_status?: ParcelPaymentStatus;
+      payment_ref?: string | null;
+      status?: ParcelStatus;
+      collected_at?: string | null;
+      delivered_at?: string | null;
+      proof_photo_path?: string | null;
+      proof_signature_name?: string | null;
+      failure_reason?: string | null;
+      created_by?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      reference?: string;
+      departure_id?: string;
+      departure_vehicle_id?: string | null;
+      sender_name?: string;
+      sender_phone?: string | null;
+      sender_address_id?: string | null;
+      recipient_name?: string;
+      recipient_phone?: string | null;
+      recipient_address_id?: string | null;
+      quantity?: number;
+      size_category?: ParcelSizeCategory;
+      units_consumed?: number;
+      description?: string | null;
+      special_instructions?: string | null;
+      prohibited_items_declared?: boolean;
+      price?: number;
+      currency?: Currency;
+      payment_status?: ParcelPaymentStatus;
+      payment_ref?: string | null;
+      status?: ParcelStatus;
+      collected_at?: string | null;
+      delivered_at?: string | null;
+      proof_photo_path?: string | null;
+      proof_signature_name?: string | null;
+      failure_reason?: string | null;
+      created_by?: string | null;
+      created_at?: string;
+    };
+  };
+  operational_stop_parcels: {
+    Row: {
+      id: string;
+      operational_stop_id: string;
+      parcel_id: string;
+      role: OperationalStopParcelRole;
+    };
+    Insert: {
+      id?: string;
+      operational_stop_id: string;
+      parcel_id: string;
+      role: OperationalStopParcelRole;
+    };
+    Update: {
+      id?: string;
+      operational_stop_id?: string;
+      parcel_id?: string;
+      role?: OperationalStopParcelRole;
+    };
+  };
 }
 
 export interface Database {
@@ -1363,6 +1784,9 @@ export interface Database {
           boys: number;
           girls: number;
           infants: number;
+          luggage_units_used: number;
+          parcel_units_used: number;
+          parcel_count: number;
         };
         Relationships: [];
       };
@@ -1451,6 +1875,30 @@ export interface Database {
       };
       confirm_handover: {
         Args: { p_handover_id: string; p_signature: string };
+        Returns: { status: string };
+      };
+      allocate_parcel_capacity: {
+        Args: {
+          p_departure_id: string;
+          p_parcel: ParcelBookingInput;
+          p_override_reason?: string | null;
+        };
+        Returns: AllocateParcelResult;
+      };
+      record_parcel_collected: {
+        Args: { p_operational_stop_parcel_id: string; p_client_id: string };
+        Returns: { status: string };
+      };
+      record_parcel_delivered: {
+        Args: {
+          p_operational_stop_parcel_id: string;
+          p_signature_name?: string | null;
+          p_proof_photo_path?: string | null;
+        };
+        Returns: { status: string };
+      };
+      record_parcel_failed: {
+        Args: { p_operational_stop_parcel_id: string; p_reason: string };
         Returns: { status: string };
       };
     };

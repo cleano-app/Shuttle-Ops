@@ -10,6 +10,8 @@ const NAV_ITEMS = [
   { href: "/office/dispatch", label: "Dispatch" },
   { href: "/office/passengers", label: "Passengers" },
   { href: "/office/vehicles", label: "Vehicles" },
+  { href: "/office/fleet", label: "Fleet" },
+  { href: "/office/parcels", label: "Parcels" },
   { href: "/office/tariffs", label: "Tariffs" },
   { href: "/office/areas", label: "Areas" },
 ];

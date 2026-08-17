@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createVehicle, setVehicleStatus } from "@/app/actions/vehicles";
 import type { VehicleStatus } from "@/types/database";
@@ -87,23 +88,31 @@ export default async function VehiclesPage() {
                   {v.wheelchair_capacity} wheelchair
                 </p>
               </div>
-              <form action={changeStatus} className="flex items-center gap-2">
-                <input type="hidden" name="id" value={v.id} />
-                <select
-                  name="status"
-                  defaultValue={v.status}
-                  className="rounded border border-slate-300 px-2 py-1.5 text-sm"
+              <div className="flex items-center gap-2">
+                <form action={changeStatus} className="flex items-center gap-2">
+                  <input type="hidden" name="id" value={v.id} />
+                  <select
+                    name="status"
+                    defaultValue={v.status}
+                    className="rounded border border-slate-300 px-2 py-1.5 text-sm"
+                  >
+                    {STATUS_OPTIONS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="submit" className="rounded border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    Update
+                  </button>
+                </form>
+                <Link
+                  href={`/office/vehicles/${v.id}`}
+                  className="rounded border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                 >
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-                <button type="submit" className="rounded border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                  Update
-                </button>
-              </form>
+                  Manage
+                </Link>
+              </div>
             </li>
           ))}
         </ul>

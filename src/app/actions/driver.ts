@@ -221,3 +221,53 @@ export async function confirmHandoverAction(handoverId: string, signature: strin
 
   return { success: true };
 }
+
+// --- Parcels (build spec §15/§31, Phase 3) — same driver_covers_stop()-
+// scoped security-definer functions as the passenger stop actions. ---
+
+export async function collectParcel(operationalStopParcelId: string, clientId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session || !requireDriver(session.role)) return { error: "Not authorized." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("record_parcel_collected", {
+    p_operational_stop_parcel_id: operationalStopParcelId,
+    p_client_id: clientId,
+  });
+  if (error) return { error: error.message };
+
+  return { success: true };
+}
+
+export async function deliverParcel(input: {
+  operationalStopParcelId: string;
+  signatureName?: string | null;
+  proofPhotoPath?: string | null;
+}): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session || !requireDriver(session.role)) return { error: "Not authorized." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("record_parcel_delivered", {
+    p_operational_stop_parcel_id: input.operationalStopParcelId,
+    p_signature_name: input.signatureName ?? null,
+    p_proof_photo_path: input.proofPhotoPath ?? null,
+  });
+  if (error) return { error: error.message };
+
+  return { success: true };
+}
+
+export async function reportParcelFailed(operationalStopParcelId: string, reason: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session || !requireDriver(session.role)) return { error: "Not authorized." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("record_parcel_failed", {
+    p_operational_stop_parcel_id: operationalStopParcelId,
+    p_reason: reason,
+  });
+  if (error) return { error: error.message };
+
+  return { success: true };
+}
