@@ -1,34 +1,15 @@
 "use client";
 
-import { computeFare, type TariffLike } from "@/lib/tariffs/computeFare";
+import { computeFare } from "@/lib/tariffs/computeFare";
+import { pickTariff, type TariffRow } from "@/lib/tariffs/pickTariff";
 import { AddressAutocomplete, type AddressOption } from "./AddressAutocomplete";
 import { defaultOccupiesSeat, emptyTravellerRow, type TravellerRow } from "./types";
 import type { Currency, DepartureDirection, PassengerCategory } from "@/types/database";
 
 const CATEGORIES: PassengerCategory[] = ["man", "woman", "boy", "girl", "infant"];
 
-export interface TariffRow extends TariffLike {
-  category: PassengerCategory | null;
-  direction: DepartureDirection | null;
-}
-
-/** Most specific match first: exact category+direction, then category with
- * direction-agnostic (null), then a fully generic route-wide row. Prices
- * are still copied onto the booking at submit time — this selection only
- * decides which row's numbers apply, per build spec §14. */
-export function pickTariff(
-  tariffs: TariffRow[],
-  category: PassengerCategory,
-  direction: DepartureDirection
-): TariffRow | null {
-  return (
-    tariffs.find((t) => t.category === category && t.direction === direction) ??
-    tariffs.find((t) => t.category === category && t.direction === null) ??
-    tariffs.find((t) => t.category === null && t.direction === direction) ??
-    tariffs.find((t) => t.category === null && t.direction === null) ??
-    null
-  );
-}
+export type { TariffRow };
+export { pickTariff };
 
 interface BookingFormPanelProps {
   travellers: TravellerRow[];

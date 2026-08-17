@@ -57,7 +57,7 @@ export type DepositStatus =
  * once one is actually required. */
 export type DepositRowStatus = Exclude<DepositStatus, "not_required">;
 
-export type CreatedVia = "phone" | "office" | "online";
+export type CreatedVia = "phone" | "office" | "online" | "referrer";
 
 export type MessageChannel = "email" | "sms";
 
@@ -300,6 +300,127 @@ export type CallOutcome =
   | "pressed_zero"
   | "urgent_routed"
   | "enquiry_only";
+
+// --- Phase 5 (Passenger/referrer self-service) ---
+
+/** Leg payload for create_online_trip_booking() (0048) — a stripped-down
+ * AllocateBookingLeg: no channel/override_reason, since those are forced
+ * server-side to 'online'/null and never trusted from the caller. */
+export interface OnlineBookingLeg {
+  departure_id: string;
+  booking_passengers: BookingPassengerInput[];
+  notes?: string | null;
+}
+
+export interface CreateOnlineTripBookingResult {
+  trip_id: string;
+  reference: string;
+  outbound: AllocateBookingResult;
+  return: AllocateBookingResult | null;
+}
+
+/** Return row shape of list_public_departures()/get_public_departure_availability()
+ * (0050) — deliberately just aggregate numbers, no passenger data. */
+export interface PublicDepartureAvailability {
+  departure_id: string;
+  route_name: string;
+  direction: DepartureDirection;
+  depart_at: string;
+  status: DepartureStatus;
+  seats_available: number;
+  hold_available: number;
+  wheelchair_available: number;
+  crossing_limit?: number | null;
+  crossing_available?: number | null;
+}
+
+/** Return shape of get_my_passenger_profile() (0050) — curated, excludes
+ * vulnerability_notes/is_vulnerable and Office-only signals. */
+export interface MyPassengerProfile {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  preferred_language: string | null;
+  mobility_needs: string | null;
+  default_pickup_address_id: string | null;
+  default_dropoff_address_id: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+}
+
+/** Return row shape of list_my_bookings() (0050). */
+export interface MyBookingSummary {
+  booking_id: string;
+  booking_reference: string;
+  booking_status: BookingStatus;
+  departure_id: string;
+  route_name: string;
+  direction: DepartureDirection;
+  depart_at: string;
+  booking_passenger_id: string;
+  passenger_status: BookingStatus;
+  notional_fare: number;
+  contribution: number;
+  currency: Currency;
+  deposit_status: DepositStatus;
+}
+
+/** Return shape of get_my_organization() (0051). */
+export interface MyOrganization {
+  id: string;
+  name: string;
+  org_type: OrgType;
+}
+
+/** Return row shape of list_my_referred_passengers() (0051) — curated,
+ * same vulnerability_notes exclusion as MyPassengerProfile. */
+export interface MyReferredPassenger {
+  passenger_id: string;
+  full_name: string;
+  phone: string | null;
+  category: PassengerCategory;
+  created_at: string;
+}
+
+/** Return row shape of list_my_sponsored_bookings() (0051) — deliberately
+ * withholds passenger identity from a sponsor. */
+export interface MySponsoredBooking {
+  booking_passenger_id: string;
+  category: PassengerCategory;
+  route_name: string;
+  direction: DepartureDirection;
+  depart_at: string;
+  sponsored: number;
+  currency: Currency;
+}
+
+/** Return row shape of list_my_cancellation_requests() (0053). */
+export interface MyCancellationRequest {
+  id: string;
+  booking_id: string;
+  cancelled_at: string;
+  notice_hours: number | null;
+  reason_text: string | null;
+  requested_via: CancellationRequestedVia;
+  decided_outcome: string | null;
+  decision_note: string | null;
+}
+
+/** Return row shape of list_my_parcels() (0052). */
+export interface MyParcelSummary {
+  parcel_id: string;
+  reference: string;
+  departure_id: string;
+  route_name: string;
+  direction: DepartureDirection;
+  depart_at: string;
+  recipient_name: string;
+  size_category: ParcelSizeCategory;
+  status: ParcelStatus;
+  price: number;
+  currency: Currency;
+}
 
 // Relationships is always [] here — this project doesn't rely on
 // supabase-js's foreign-table embedding, so every table gets an empty
@@ -1714,6 +1835,7 @@ interface TablesRaw {
       failure_reason: string | null;
       created_by: string | null;
       created_at: string;
+      booked_online_by_passenger_id: string | null;
     };
     Insert: {
       id?: string;
@@ -1744,6 +1866,7 @@ interface TablesRaw {
       failure_reason?: string | null;
       created_by?: string | null;
       created_at?: string;
+      booked_online_by_passenger_id?: string | null;
     };
     Update: {
       id?: string;
@@ -1774,6 +1897,7 @@ interface TablesRaw {
       failure_reason?: string | null;
       created_by?: string | null;
       created_at?: string;
+      booked_online_by_passenger_id?: string | null;
     };
   };
   operational_stop_parcels: {
@@ -2130,6 +2254,55 @@ interface TablesRaw {
       notes?: string | null;
     };
   };
+  passenger_saved_addresses: {
+    Row: {
+      id: string;
+      passenger_id: string;
+      address_id: string;
+      label: string | null;
+      is_default_pickup: boolean;
+      is_default_dropoff: boolean;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      passenger_id: string;
+      address_id: string;
+      label?: string | null;
+      is_default_pickup?: boolean;
+      is_default_dropoff?: boolean;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      passenger_id?: string;
+      address_id?: string;
+      label?: string | null;
+      is_default_pickup?: boolean;
+      is_default_dropoff?: boolean;
+      created_at?: string;
+    };
+  };
+  organization_account_users: {
+    Row: {
+      id: string;
+      organization_id: string;
+      user_id: string;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      organization_id: string;
+      user_id: string;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      organization_id?: string;
+      user_id?: string;
+      created_at?: string;
+    };
+  };
 }
 
 export interface Database {
@@ -2278,6 +2451,97 @@ export interface Database {
       recompute_leg_timings: {
         Args: Record<string, never>;
         Returns: number;
+      };
+      create_online_trip_booking: {
+        Args: {
+          p_outbound: OnlineBookingLeg;
+          p_return?: OnlineBookingLeg | null;
+        };
+        Returns: CreateOnlineTripBookingResult;
+      };
+      signup_passenger_account: {
+        Args: {
+          p_full_name: string;
+          p_phone?: string | null;
+          p_email?: string | null;
+          p_preferred_language?: string | null;
+        };
+        Returns: string;
+      };
+      get_my_passenger_profile: {
+        Args: Record<string, never>;
+        Returns: MyPassengerProfile[];
+      };
+      update_my_passenger_profile: {
+        Args: {
+          p_full_name: string;
+          p_phone: string | null;
+          p_email: string | null;
+          p_preferred_language: string | null;
+          p_mobility_needs: string | null;
+          p_emergency_contact_name: string | null;
+          p_emergency_contact_phone: string | null;
+          p_default_pickup_address_id?: string | null;
+          p_default_dropoff_address_id?: string | null;
+        };
+        Returns: void;
+      };
+      list_my_bookings: {
+        Args: Record<string, never>;
+        Returns: MyBookingSummary[];
+      };
+      list_public_departures: {
+        Args: { p_limit?: number };
+        Returns: PublicDepartureAvailability[];
+      };
+      get_public_departure_availability: {
+        Args: { p_departure_id: string };
+        Returns: PublicDepartureAvailability[];
+      };
+      create_passenger_address: {
+        Args: {
+          p_line1: string;
+          p_line2: string | null;
+          p_city: string | null;
+          p_postcode: string;
+          p_country?: string;
+          p_area_id?: string | null;
+        };
+        Returns: string;
+      };
+      get_my_organization: {
+        Args: Record<string, never>;
+        Returns: MyOrganization[];
+      };
+      refer_passenger: {
+        Args: {
+          p_full_name: string;
+          p_phone?: string | null;
+          p_email?: string | null;
+          p_category?: PassengerCategory;
+          p_preferred_language?: string | null;
+        };
+        Returns: string;
+      };
+      list_my_referred_passengers: {
+        Args: Record<string, never>;
+        Returns: MyReferredPassenger[];
+      };
+      list_my_sponsored_bookings: {
+        Args: Record<string, never>;
+        Returns: MySponsoredBooking[];
+      };
+      list_my_parcels: {
+        Args: Record<string, never>;
+        Returns: MyParcelSummary[];
+      };
+      request_cancellation_online: {
+        Args: { p_booking_id: string; p_reason_text: string };
+        Returns: string;
+      };
+      list_my_cancellation_requests: {
+        Args: Record<string, never>;
+        Returns: MyCancellationRequest[];
       };
     };
   };

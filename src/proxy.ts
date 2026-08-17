@@ -49,16 +49,51 @@ export async function proxy(request: NextRequest) {
   }
 
   const path = request.nextUrl.pathname;
-  const isPublicRoute =
+  const isStaffPublicRoute =
     path === "/login" || path === "/forgot-password" || path === "/reset-password";
+  // Passenger/referrer portal (build spec Phase 5, §39) has its own login
+  // separate from staff — a portal user is never expected to have a
+  // `profiles` row, so it can't share /login's redirect target or
+  // "logged in" definition (that's resolved at the layout level via
+  // getPortalSession(), not here — this check only knows Supabase auth
+  // has SOME user, not which kind of account).
+  const isPortalRoute = path.startsWith("/portal");
+  const isPortalPublicRoute =
+    path === "/portal/login" ||
+    path === "/portal/signup" ||
+    path === "/portal/forgot-password" ||
+    path === "/portal/reset-password";
 
-  if (!user && !isPublicRoute) {
+  if (!user && isPortalRoute && !isPortalPublicRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/portal/login";
+    return NextResponse.redirect(url);
+  }
+
+  if (!user && !isPortalRoute && !isStaffPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  if (user && isPublicRoute) {
+  if (user && isStaffPublicRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
+
+  if (user && isPortalPublicRoute) {
+    // NOT a hardcoded /portal/dashboard — this Supabase session might
+    // belong to a STAFF account (or, allocate_booking_capacity aside,
+    // someone with no portal link at all) visiting a portal auth page
+    // directly, which has no passenger_account_users/
+    // organization_account_users row at all. Redirecting straight to
+    // /portal/dashboard for every authenticated user caused an infinite
+    // loop: (app)/layout.tsx's own getPortalSession() check would find
+    // nothing, bounce to /portal/login, which — still authenticated —
+    // bounced right back here. Root `/` already has the full staff-then-
+    // portal session resolution (src/app/page.tsx) and sends everyone to
+    // the right place, or /login if neither kind of session exists.
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);

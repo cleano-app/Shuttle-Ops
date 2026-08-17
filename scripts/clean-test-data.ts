@@ -26,7 +26,12 @@ config({ path: join(__dirname, "..", ".env.local") });
 // driver_expenses (departure_id), cancellations (booking_id),
 // disruption_events (departure_id) and waitlist (departure_id) - all
 // deleted explicitly here too, before their parent departures/bookings/
-// parcels rows.
+// parcels rows. Phase 5 added organizations ("Test Referrer Org Phase5%"/
+// "Test Sponsor Org Phase5%" prefixes) and ad-hoc addresses created outside
+// seedDispatchScenario's "Test Stop%" convention ("Test Address Phase5 %")
+// - both swept below too, found live when a phase5.test.ts run's addresses
+// showed up unswept in the real address-autocomplete during manual
+// browser verification.
 async function main() {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
@@ -79,13 +84,30 @@ async function main() {
     const { rowCount: routesDeleted } = await client.query(`delete from routes where name like 'Test Route %'`);
     const { rowCount: vehiclesDeleted } = await client.query(`delete from vehicles where registration like 'TEST-%'`);
     const { rowCount: passengersDeleted } = await client.query(`delete from passengers where full_name like 'Test Passenger %'`);
-    const { rowCount: addressesDeleted } = await client.query(`delete from addresses where line1 like 'Test Stop%'`);
+    const { rowCount: addressesDeleted } = await client.query(
+      `delete from addresses where line1 like 'Test Stop%' or line1 like 'Test Address Phase5 %'`
+    );
     const { rowCount: areasDeleted } = await client.query(`delete from areas where name like 'Test Area %'`);
+
+    // Organizations (Phase 5 referrer/sponsor portal) — decouple any
+    // booking_passengers.sponsor_org_id reference first (same reasoning as
+    // tests/integration/phase5.test.ts's own afterAll: those bookings
+    // belong to unrelated "Test Route %" fixtures already swept above by
+    // name, not by walking through this org).
+    await client.query(
+      `update booking_passengers set sponsor_org_id = null where sponsor_org_id in (
+         select id from organizations where name like 'Test Referrer Org Phase5%' or name like 'Test Sponsor Org Phase5%'
+       )`
+    );
+    const { rowCount: organizationsDeleted } = await client.query(
+      `delete from organizations where name like 'Test Referrer Org Phase5%' or name like 'Test Sponsor Org Phase5%'`
+    );
 
     await client.query("commit");
 
     console.log(`Removed: ${departureIds.length} departures, ${routesDeleted} routes, ${vehiclesDeleted} vehicles,`);
-    console.log(`         ${passengersDeleted} passengers, ${addressesDeleted} addresses, ${areasDeleted} areas.`);
+    console.log(`         ${passengersDeleted} passengers, ${addressesDeleted} addresses, ${areasDeleted} areas,`);
+    console.log(`         ${organizationsDeleted} organizations.`);
   } catch (err) {
     await client.query("rollback");
     throw err;

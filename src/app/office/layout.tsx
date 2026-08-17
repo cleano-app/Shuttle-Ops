@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/office/tariffs", label: "Tariffs" },
   { href: "/office/areas", label: "Areas" },
   { href: "/office/accounting", label: "Accounting" },
+  { href: "/office/organizations", label: "Organizations" },
 ];
 
 export default async function OfficeLayout({
