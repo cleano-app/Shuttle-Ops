@@ -45,6 +45,13 @@ export default function InstallPage() {
         </ol>
       </section>
 
+      <Link
+        href="/book"
+        className="mb-5 flex min-h-12 w-full items-center justify-center rounded-button border-2 border-teal bg-teal-bg px-5 text-base font-semibold text-teal-text"
+      >
+        Book a seat online
+      </Link>
+
       <div className="flex justify-between text-sm">
         <Link href="/login" className="text-muted underline">
           Staff sign in

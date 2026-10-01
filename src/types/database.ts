@@ -334,6 +334,47 @@ export interface PublicDepartureAvailability {
   crossing_available?: number | null;
 }
 
+export type BookingRequestStatus = "pending" | "converted" | "waitlisted" | "declined" | "cancelled";
+
+/** booking_requests row (0063). */
+export type BookingRequestRow = {
+  id: string;
+  reference: string;
+  status: BookingRequestStatus;
+  outbound_departure_id: string;
+  return_departure_id: string | null;
+  men: number;
+  women: number;
+  boys: number;
+  girls: number;
+  infants: number;
+  luggage_large: number;
+  luggage_small: number;
+  luggage_hand: number;
+  pickup_line1: string;
+  pickup_postcode: string;
+  pickup_city: string | null;
+  dropoff_line1: string;
+  dropoff_postcode: string;
+  dropoff_city: string | null;
+  mobility_needs: string | null;
+  contact_name: string;
+  contact_phone: string;
+  contact_phone_digits: string;
+  contact_email: string | null;
+  preferred_language: string | null;
+  notes: string | null;
+  created_at: string;
+  handled_by: string | null;
+  handled_at: string | null;
+  converted_booking_reference: string | null;
+  decline_reason: string | null;
+  lead_passenger_id: string | null;
+  passenger_ids: string[] | null;
+  pickup_address_id: string | null;
+  dropoff_address_id: string | null;
+};
+
 /** Return shape of get_my_passenger_profile() (0050) — curated, excludes
  * vulnerability_notes/is_vulnerable and Office-only signals. */
 export interface MyPassengerProfile {
@@ -1606,6 +1647,26 @@ interface TablesRaw {
       recorded_at?: string;
     };
   };
+  // 0063: public /book requests. Inserted only through
+  // submit_booking_request(); Office reads/updates.
+  booking_requests: {
+    Row: BookingRequestRow;
+    Insert: Partial<BookingRequestRow>;
+    Update: Partial<
+      Pick<
+        BookingRequestRow,
+        | "status"
+        | "handled_by"
+        | "handled_at"
+        | "converted_booking_reference"
+        | "decline_reason"
+        | "lead_passenger_id"
+        | "passenger_ids"
+        | "pickup_address_id"
+        | "dropoff_address_id"
+      >
+    >;
+  };
   fleet_tasks: {
     Row: {
       id: string;
@@ -2528,6 +2589,10 @@ export interface Database {
       list_my_bookings: {
         Args: Record<string, never>;
         Returns: MyBookingSummary[];
+      };
+      submit_booking_request: {
+        Args: { p: Record<string, unknown> };
+        Returns: string;
       };
       list_public_departures: {
         Args: { p_limit?: number };

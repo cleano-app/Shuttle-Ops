@@ -177,6 +177,7 @@ export default async function OfficeDashboardPage({
     { count: undecidedCancellations ?? 0, label: "cancellations to decide", href: "/office/cancellations" },
     { count: unreconciledCash ?? 0, label: "cash entries to reconcile", href: "/office/departures?show=past" },
     { count: openFleetTasks ?? 0, label: "open fleet tasks", href: "/office/fleet" },
+    { count: (await supabase.from("booking_requests").select("id", { count: "exact", head: true }).eq("status", "pending")).count ?? 0, label: "online booking requests to call back", href: "/office/requests" },
   ].filter((a) => a.count > 0);
 
   return (

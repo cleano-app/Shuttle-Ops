@@ -24,6 +24,7 @@ const GROUPS: NavGroup[] = [
   {
     heading: "Operations",
     items: [
+      { href: "/office/requests", label: "Booking requests", icon: "user-plus" },
       { href: "/office/passengers", label: "Passengers", icon: "users" },
       { href: "/office/parcels", label: "Parcels", icon: "package" },
       { href: "/office/cancellations", label: "Cancellations", icon: "x-circle" },
