@@ -107,7 +107,7 @@ export async function DepartureBookings({
       r.luggage_large && `${r.luggage_large} large`,
       r.luggage_small && `${r.luggage_small} small`,
       r.luggage_hand && `${r.luggage_hand} hand`,
-      r.luggage_oversize && `${r.luggage_oversize} oversize`,
+      r.luggage_oversize && `${r.luggage_oversize} ${r.luggage_oversize === 1 ? "buggy" : "buggies"}`,
     ]
       .filter(Boolean)
       .join(" · ");

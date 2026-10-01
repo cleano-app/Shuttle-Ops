@@ -71,7 +71,9 @@ const LUGGAGE: { kind: LuggageKind; label: string }[] = [
   { kind: "large", label: "Large" },
   { kind: "small", label: "Small" },
   { kind: "hand", label: "Hand" },
-  { kind: "oversize", label: "Oversize" },
+  // A buggy is carried as the bulky item (owner: "delete oversize, put
+  // buggy"); same data field and charge as before.
+  { kind: "oversize", label: "Buggy" },
 ];
 
 function passengerTitle(row: TravellerRow, index: number): string {

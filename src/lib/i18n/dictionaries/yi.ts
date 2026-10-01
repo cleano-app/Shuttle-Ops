@@ -60,7 +60,7 @@ const yi: Record<DictionaryKey, string> = {
   book_luggage_large: "גרויסע זעק",
   book_luggage_small: "קליינע זעק",
   book_luggage_hand: "האַנט־באַגאַזש",
-  book_luggage_oversize: "זייער גרויסע זאַכן",
+  book_luggage_oversize: "קינדער־וועגעלעך",
   book_wheelchair_needed: "נייטיק אַ פּלאַץ פֿאַר ראָד־שטול",
   book_notes: "באַמערקונגען פֿאַרן אָפיס",
   book_submit: "רעזערווירן",

@@ -3,6 +3,7 @@
 import { useId, useRef, useState } from "react";
 import { createAddress, searchAddressesAction } from "@/app/actions/addresses";
 import { isLikelyDuplicate } from "@/lib/addresses/fuzzyMatch";
+import { placeAddress, searchPlaces, type PlaceAddress, type PlaceSuggestion } from "./googlePlaces";
 
 export interface AddressOption {
   id: string;
@@ -47,8 +48,9 @@ const inputClass =
   "w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-800 focus:outline-none focus:ring-1 focus:ring-blue-800";
 
 /**
- * Internal fuzzy-match autocomplete (build spec §16) — no external mapping
- * API. Debounced calls to searchAddressesAction (a thin wrapper around the
+ * Address autocomplete (build spec §16): our own address book first
+ * (fuzzy match), then Google suggestions for addresses we don't have yet
+ * (owner, 1 Oct 2026), saved into the book once chosen. Debounced calls to searchAddressesAction (a thin wrapper around the
  * search_addresses() Postgres function). The caller's default addresses
  * are pinned at the top, fixed points next, and "+ New address" lets
  * Office add an address for a new caller without leaving the console.
@@ -68,6 +70,9 @@ export function AddressAutocomplete({
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [places, setPlaces] = useState<PlaceSuggestion[]>([]);
+  const [prefill, setPrefill] = useState<PlaceAddress | null>(null);
+  const [placeError, setPlaceError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Resync the visible text when the parent's value changes for a reason
@@ -85,6 +90,20 @@ export function AddressAutocomplete({
     setQuery(addressLabel(option));
     setOpen(false);
     setCreating(false);
+    setPrefill(null);
+  }
+
+  async function chooseOnline(p: PlaceSuggestion) {
+    setPlaceError(null);
+    const addr = await placeAddress(p.placeId);
+    if (!addr) {
+      setPlaceError("Couldn't fetch that address from Google - type it in instead.");
+      setPrefill(null);
+    } else {
+      setPrefill(addr);
+    }
+    setCreating(true);
+    setOpen(false);
   }
 
   function handleChange(next: string) {
@@ -94,10 +113,13 @@ export function AddressAutocomplete({
     debounceRef.current = setTimeout(async () => {
       if (next.trim().length < 2) {
         setResults([]);
+        setPlaces([]);
         setSearchError(null);
         return;
       }
       setSearching(true);
+      // Google suggestions alongside our own address book.
+      void searchPlaces(next).then(setPlaces);
       const res = await searchAddressesAction(next);
       setSearching(false);
       setSearchError(res.error ?? null);
@@ -166,6 +188,24 @@ export function AddressAutocomplete({
           {!searching && query.trim().length >= 2 && otherResults.length === 0 && !searchError && (
             <li className="px-3 py-2 text-sm text-slate-500">No saved address matches.</li>
           )}
+          {places.length > 0 && (
+            <li className="border-t border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              From Google
+            </li>
+          )}
+          {places.map((p) => (
+            <li key={p.placeId}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => void chooseOnline(p)}
+                className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+              >
+                <span className="font-medium text-slate-900">{p.main}</span>
+                {p.secondary && <span className="text-slate-500"> · {p.secondary}</span>}
+              </button>
+            </li>
+          ))}
           <li>
             <button
               type="button"
@@ -192,12 +232,18 @@ export function AddressAutocomplete({
         </button>
       )}
 
+      {placeError && <p className="mt-1 text-xs text-amber-700">{placeError}</p>}
       {creating && (
         <NewAddressForm
+          key={prefill ? `${prefill.line1}|${prefill.postcode}` : "manual"}
+          prefill={prefill}
           initialLine1={query}
           areas={areas}
           existing={[...suggestions.map((s) => s.address), ...results]}
-          onCancel={() => setCreating(false)}
+          onCancel={() => {
+            setCreating(false);
+            setPrefill(null);
+          }}
           onCreated={choose}
         />
       )}
@@ -207,12 +253,15 @@ export function AddressAutocomplete({
 
 function NewAddressForm({
   initialLine1,
+  prefill = null,
   areas,
   existing,
   onCancel,
   onCreated,
 }: {
   initialLine1: string;
+  /** Filled in from a Google result; Office adds the area and saves. */
+  prefill?: PlaceAddress | null;
   areas: AreaOption[];
   existing: AddressOption[];
   onCancel: () => void;
@@ -220,12 +269,16 @@ function NewAddressForm({
 }) {
   // A typed postcode-looking query shouldn't land in line 1.
   const looksLikePostcode = /^[A-Za-z]{1,2}\d[A-Za-z\d]?\s*\d[A-Za-z]{2}$|^\d{4}$/.test(initialLine1.trim());
-  const [line1, setLine1] = useState(looksLikePostcode ? "" : initialLine1);
+  const [line1, setLine1] = useState(prefill?.line1 ?? (looksLikePostcode ? "" : initialLine1));
   const [line2, setLine2] = useState("");
-  const [city, setCity] = useState("");
-  const [postcode, setPostcode] = useState(looksLikePostcode ? initialLine1.trim().toUpperCase() : "");
-  const [country, setCountry] = useState<"GB" | "BE">("GB");
-  const [areaId, setAreaId] = useState("");
+  const [city, setCity] = useState(prefill?.city ?? "");
+  const [postcode, setPostcode] = useState(prefill?.postcode ?? (looksLikePostcode ? initialLine1.trim().toUpperCase() : ""));
+  const [country, setCountry] = useState<"GB" | "BE">(prefill?.country ?? "GB");
+  // With a single area for the country, pick it straight away.
+  const [areaId, setAreaId] = useState(() => {
+    const forCountry = areas.filter((a) => a.country === (prefill?.country ?? "GB"));
+    return prefill && forCountry.length === 1 ? forCountry[0].id : "";
+  });
   const [accessNotes, setAccessNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

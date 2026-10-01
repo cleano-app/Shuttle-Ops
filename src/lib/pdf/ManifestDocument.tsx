@@ -162,7 +162,7 @@ export function ManifestDocument({ data }: { data: ManifestData }) {
                 <Text style={styles.passengerPhone}>{p.phone ?? ""}</Text>
                 <Text style={styles.passengerDetail}>
                   {p.luggage_large + p.luggage_small} suitcases
-                  {p.luggage_oversize > 0 ? `, ${p.luggage_oversize} oversize` : ""}
+                  {p.luggage_oversize > 0 ? `, ${p.luggage_oversize} ${p.luggage_oversize === 1 ? "buggy" : "buggies"}` : ""}
                 </Text>
               </View>
             ))}

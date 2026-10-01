@@ -56,7 +56,7 @@ const nl: Record<DictionaryKey, string> = {
   book_luggage_large: "Grote tassen",
   book_luggage_small: "Kleine tassen",
   book_luggage_hand: "Handbagage",
-  book_luggage_oversize: "Extra grote items",
+  book_luggage_oversize: "Buggy's",
   book_wheelchair_needed: "Rolstoelplaats nodig",
   book_notes: "Opmerkingen voor het kantoor",
   book_submit: "Reserveren",

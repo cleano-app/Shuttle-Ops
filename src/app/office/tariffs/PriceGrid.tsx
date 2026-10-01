@@ -195,8 +195,8 @@ export function PriceGrid({ routeId, routeName, rows }: { routeId: string; route
             <LuggageField routeId={routeId} field="luggage_additional_charge_gbp" label="Extra bag" initial={Number(standard.luggage_additional_charge_gbp)} money="GBP" />
             <LuggageField routeId={routeId} field="luggage_additional_charge_eur" label="Extra bag" initial={Number(standard.luggage_additional_charge_eur)} money="EUR" />
             <span />
-            <LuggageField routeId={routeId} field="luggage_oversize_charge_gbp" label="Oversize item" initial={Number(standard.luggage_oversize_charge_gbp)} money="GBP" />
-            <LuggageField routeId={routeId} field="luggage_oversize_charge_eur" label="Oversize item" initial={Number(standard.luggage_oversize_charge_eur)} money="EUR" />
+            <LuggageField routeId={routeId} field="luggage_oversize_charge_gbp" label="Buggy" initial={Number(standard.luggage_oversize_charge_gbp)} money="GBP" />
+            <LuggageField routeId={routeId} field="luggage_oversize_charge_eur" label="Buggy" initial={Number(standard.luggage_oversize_charge_eur)} money="EUR" />
           </div>
         </section>
       )}

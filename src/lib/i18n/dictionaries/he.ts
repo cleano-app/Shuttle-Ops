@@ -56,7 +56,7 @@ const he: Record<DictionaryKey, string> = {
   book_luggage_large: "מזוודות גדולות",
   book_luggage_small: "מזוודות קטנות",
   book_luggage_hand: "מטען יד",
-  book_luggage_oversize: "פריטים גדולים במיוחד",
+  book_luggage_oversize: "עגלות ילדים",
   book_wheelchair_needed: "נדרש מקום לכיסא גלגלים",
   book_notes: "הערות למשרד",
   book_submit: "הזמן מקום",

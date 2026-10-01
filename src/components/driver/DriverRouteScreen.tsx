@@ -311,7 +311,7 @@ export function DriverRouteScreen({
                         </p>
                         <p className="text-sm text-slate-500">
                           {p.category} · {p.luggage_large + p.luggage_small} suitcases
-                          {p.luggage_oversize > 0 && ` · ${p.luggage_oversize} oversize`}
+                          {p.luggage_oversize > 0 && ` · ${p.luggage_oversize} ${p.luggage_oversize === 1 ? "buggy" : "buggies"}`}
                           {p.phone && ` · ${p.phone}`}
                         </p>
                         {p.mobility_needs && <p className="text-sm text-amber-700">{p.mobility_needs}</p>}

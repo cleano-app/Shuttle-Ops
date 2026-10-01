@@ -57,7 +57,7 @@ const en = {
   book_luggage_large: "Large bags",
   book_luggage_small: "Small bags",
   book_luggage_hand: "Hand luggage",
-  book_luggage_oversize: "Oversize items",
+  book_luggage_oversize: "Buggies",
   book_wheelchair_needed: "Wheelchair space needed",
   book_notes: "Notes for the office",
   book_submit: "Reserve",
