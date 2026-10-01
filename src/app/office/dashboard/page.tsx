@@ -9,6 +9,8 @@ import { DayPicker } from "@/components/office/DayPicker";
 import { LiveDriversMap } from "@/components/office/LiveDriversMap";
 import { getLiveDriverLocations } from "@/app/actions/driverLocation";
 import { getCheckinWarning } from "@/app/actions/operationalStops";
+import { getFxRates } from "@/lib/fx";
+import { CurrencyConverter } from "@/components/office/CurrencyConverter";
 
 type DepartureRow = {
   id: string;
@@ -159,6 +161,8 @@ export default async function OfficeDashboardPage({
       : []
   );
 
+  const fx = await getFxRates();
+
   const summaryOf = new Map((summaries ?? []).map((s) => [s.departure_id, s]));
   const stopsOf = new Map<string, StopRow[]>();
   for (const s of (stops ?? []) as unknown as StopRow[]) stopsOf.set(s.departure_id, [...(stopsOf.get(s.departure_id) ?? []), s]);
@@ -202,6 +206,12 @@ export default async function OfficeDashboardPage({
           </Link>
         </div>
       </div>
+
+      {fx && (
+        <div className="xl:max-w-xl">
+          <CurrencyConverter perEur={fx.perEur} date={fx.date} />
+        </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-5">
         <section className="space-y-3 xl:col-span-3">
