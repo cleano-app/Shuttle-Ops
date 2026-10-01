@@ -93,7 +93,7 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         placeholder="0"
         aria-label={`${NAMES[code] ?? code} amount`}
-        className="min-w-0 flex-1 bg-transparent py-2.5 text-end text-lg font-semibold tabular-nums text-slate-900 outline-none"
+        className="w-0 min-w-0 flex-1 bg-transparent py-2.5 text-end text-lg font-semibold tabular-nums text-slate-900 outline-none"
       />
     </label>
   );

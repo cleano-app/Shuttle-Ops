@@ -264,7 +264,7 @@ export default async function DepartureDetailPage({
         departAt={departure.depart_at}
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className={card}>
           <h2 className="mb-3 font-semibold text-slate-900">Schedule & crossing</h2>
           <p className="mb-3 text-xs text-slate-500">

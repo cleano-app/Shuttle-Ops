@@ -74,7 +74,7 @@ export default async function PassengerDetailPage({ params }: { params: Promise<
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section className="rounded-xl border border-slate-200 bg-white p-4 lg:col-span-2">
           <h2 className="mb-3 font-semibold text-slate-900">Details</h2>
           <ActionForm action={save} className="grid gap-3 sm:grid-cols-2">

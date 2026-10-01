@@ -207,8 +207,8 @@ export default async function OfficeDashboardPage({
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-5">
-        <section className="space-y-3 xl:col-span-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+        <section className="min-w-0 space-y-3 xl:col-span-3">
           <h2 className="font-semibold text-slate-900">{isToday ? "Today's departures" : "Departures"}</h2>
           {departures.length === 0 ? (
             <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
@@ -351,7 +351,7 @@ export default async function OfficeDashboardPage({
           )}
         </section>
 
-        <div className="space-y-6 xl:col-span-2">
+        <div className="min-w-0 space-y-6 xl:col-span-2">
           {isToday && (
             <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               <h2 className="border-b border-slate-200 p-4 font-semibold text-slate-900">Drivers on the map</h2>
