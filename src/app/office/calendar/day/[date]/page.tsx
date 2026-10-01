@@ -8,6 +8,7 @@ import { Journey } from "@/components/Journey";
 import { AddFab } from "@/components/shell/AddFab";
 import { zmanimFor } from "@/lib/zmanim";
 import { ZmanIcon } from "@/components/ZmanIcon";
+import { TimelineZoom } from "@/components/office/TimelineZoom";
 
 type DepartureRow = {
   id: string;
@@ -26,9 +27,11 @@ type BookingRow = {
   booking_passengers?: { id: string; status: string }[];
 };
 
-const HOUR_PX = 56;
-const FIRST_HOUR = 5;
+// Whole day, 00:00-24:00. Heights scale with --hour (TimelineZoom).
+const FIRST_HOUR = 0;
 const LAST_HOUR = 23;
+/** CSS length for `h` hours on the zoomable timeline. */
+const hrs = (h: number) => `calc(var(--hour) * ${h.toFixed(4)})`;
 
 function shift(day: string, n: number) {
   const d = new Date(`${day}T12:00:00Z`);
@@ -202,22 +205,24 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
         {departures.length === 0 && (
           <p className="border-b border-slate-200 p-4 text-sm text-slate-500">No departures on this day.</p>
         )}
-        <div className="relative flex">
+        <TimelineZoom>
+        <div className="relative flex pt-2">
           <div className="w-12 shrink-0 border-e border-slate-200">
             {Array.from({ length: LAST_HOUR - FIRST_HOUR + 1 }, (_, i) => (
-              <div key={i} className="relative text-end text-[11px] text-slate-400" style={{ height: HOUR_PX }}>
-                <span className="absolute -top-2 end-1.5">{String(FIRST_HOUR + i).padStart(2, "0")}:00</span>
+              <div key={i} className="relative text-end text-[11px] text-slate-400" style={{ height: hrs(1) }}>
+                {i > 0 && <span className="absolute -top-2 end-1.5">{String(FIRST_HOUR + i).padStart(2, "0")}:00</span>}
               </div>
             ))}
           </div>
-          <div className="relative flex-1" style={{ height: (LAST_HOUR - FIRST_HOUR + 1) * HOUR_PX }}>
+          <div className="relative flex-1" style={{ height: hrs(LAST_HOUR - FIRST_HOUR + 1) }}>
             {Array.from({ length: LAST_HOUR - FIRST_HOUR + 1 }, (_, i) => (
-              <div key={i} className="border-b border-slate-100" style={{ height: HOUR_PX }} />
+              <div key={i} className="border-b border-slate-100" style={{ height: hrs(1) }} />
             ))}
             {nowMin !== null && nowMin >= FIRST_HOUR * 60 && nowMin <= (LAST_HOUR + 1) * 60 && (
               <div
                 className="absolute inset-x-0 z-10 border-t-2 border-red-500"
-                style={{ top: ((nowMin - FIRST_HOUR * 60) / 60) * HOUR_PX }}
+                data-scroll-anchor
+                style={{ top: hrs((nowMin - FIRST_HOUR * 60) / 60) }}
               >
                 <span className="absolute -start-1.5 -top-1.5 h-3 w-3 rounded-full bg-red-500" />
               </div>
@@ -229,7 +234,7 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
                 <div
                   key={m.label}
                   className="pointer-events-none absolute inset-x-0 z-[5] border-t border-dashed"
-                  style={{ top: ((min - FIRST_HOUR * 60) / 60) * HOUR_PX, borderColor: m.color }}
+                  style={{ top: hrs((min - FIRST_HOUR * 60) / 60), borderColor: m.color }}
                 >
                   <span
                     className={`absolute -top-4 rounded bg-white/90 px-1 text-[10px] font-semibold ${m.left ? "start-1" : "end-1"}`}
@@ -243,15 +248,16 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
             {placed.map(({ d, start, end, lane }) => {
               const ends = journeyEnds(d.routes?.name, d.direction);
               const color = ends ? placeStyle(ends[0]).color : "#64748b";
-              const top = ((Math.max(start, FIRST_HOUR * 60) - FIRST_HOUR * 60) / 60) * HOUR_PX;
-              const height = Math.max(48, ((end - Math.max(start, FIRST_HOUR * 60)) / 60) * HOUR_PX - 2);
+              const top = hrs((Math.max(start, FIRST_HOUR * 60) - FIRST_HOUR * 60) / 60);
+              const height = `max(2.75rem, calc(${hrs((end - Math.max(start, FIRST_HOUR * 60)) / 60)} - 2px))`;
               const list = bookingsOf.get(d.id) ?? [];
               const drivers = driverOf.get(d.id);
               return (
                 <Link
                   key={d.id}
                   href={`/office/departures/${d.id}`}
-                  className="absolute overflow-hidden rounded-lg border-s-4 p-2 text-xs shadow-sm hover:brightness-95"
+                  data-scroll-anchor={nowMin === null && d.id === placed[0]?.d.id ? "" : undefined}
+                  className="absolute z-[6] overflow-hidden rounded-lg border-s-4 p-2 text-xs shadow-sm hover:brightness-95"
                   style={{
                     top,
                     height,
@@ -294,6 +300,7 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
             })}
           </div>
         </div>
+        </TimelineZoom>
       </div>
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <h2 className="border-b border-slate-200 p-4 font-semibold text-slate-900">Zmanim</h2>
