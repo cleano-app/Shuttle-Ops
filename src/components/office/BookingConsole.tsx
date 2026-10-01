@@ -7,12 +7,11 @@ import { PassengerLookupPanel, type PassengerSummary } from "./PassengerLookupPa
 import { DepartureInfoPanel, departureOptionLabel, type DepartureOption } from "./DepartureInfoPanel";
 import { BookingFormPanel, pickTariff, snapshotFor, type TariffRow } from "./BookingFormPanel";
 import { addressLabel, type AddressOption, type AddressSuggestion, type AreaOption } from "./AddressAutocomplete";
-import { emptyTravellerRow, type DepositDefaults, type TravellerRow } from "./types";
+import { emptyTravellerRow, type DepositDefaults, type TravellerRow, fareFor } from "./types";
 import { CallOutcomePanel, outcomeLabel, type LoggedCall } from "./booking/CallOutcomePanel";
 import { capacityMessage, isWaitlistable, parseCapacityCode, type WaitlistableCode } from "./booking/capacityMessages";
 import { journeyKey, oppositeDirection, ukDayKey } from "./booking/departureDays";
 import { Card } from "./booking/ui";
-import { computeFare } from "@/lib/tariffs/computeFare";
 import { listTariffsForRoute } from "@/app/actions/tariffs";
 import { createPassenger } from "@/app/actions/passengers";
 import { createProvisionalTripBooking } from "@/app/actions/bookings";
@@ -122,7 +121,19 @@ export function BookingConsole({
   const [callRound, setCallRound] = useState(0);
 
   const outbound = initialDepartures.find((d) => d.id === outboundId) ?? null;
-  const returnDeparture = initialDepartures.find((d) => d.id === returnId) ?? null;
+  // A return is the opposite journey on the same route, leaving after the
+  // outbound. A previously chosen return that no longer fits (the outbound
+  // was changed) simply drops out.
+  const returnCandidates = outbound
+    ? initialDepartures.filter(
+        (d) =>
+          d.id !== outbound.id &&
+          d.route_id === outbound.route_id &&
+          d.direction === oppositeDirection(outbound.direction) &&
+          new Date(d.depart_at) > new Date(outbound.depart_at)
+      )
+    : [];
+  const returnDeparture = returnCandidates.find((d) => d.id === returnId) ?? null;
 
   const addressSuggestions: AddressSuggestion[] = [];
   if (callerDefaults.pickup) addressSuggestions.push({ tag: "Caller pickup", address: callerDefaults.pickup });
@@ -243,7 +254,7 @@ export function BookingConsole({
     return rows.map((row) => {
       const tariff = pickTariff(tariffs, row.category, departure.direction as DepartureDirection);
       const fare = tariff
-        ? computeFare({ tariff, currency, luggage: row.luggage, contribution: row.contribution, sponsored: row.sponsored })
+        ? fareFor(row, tariff, currency)
         : {
             notionalFare: 0,
             contribution: 0,
@@ -288,7 +299,7 @@ export function BookingConsole({
     return travellers.findIndex((row) => {
       const tariff = pickTariff(tariffs, row.category, departure.direction as DepartureDirection);
       if (!tariff) return false;
-      return !computeFare({ tariff, currency, luggage: row.luggage, contribution: row.contribution, sponsored: row.sponsored })
+      return !fareFor(row, tariff, currency)
         .isValid;
     });
   }
@@ -449,12 +460,29 @@ export function BookingConsole({
   const depositsDue = travellers.filter((t) => !t.depositWaived && !t.standingWaiver).length;
   const depositAmount = depositDefaults?.[currency] ?? null;
   const symbol = currency === "GBP" ? "£" : "€";
+  // Total to collect for the bar: what the passengers pay on every leg
+  // (price list via computeFare) plus refundable deposits.
+  const legsForTotal = [
+    outbound ? { tariffs: outboundTariffs, direction: outbound.direction } : null,
+    returnEnabled && returnDeparture
+      ? { tariffs: tariffsByRoute[returnDeparture.route_id] ?? [], direction: returnDeparture.direction }
+      : null,
+  ].filter((l): l is { tariffs: TariffRow[]; direction: string } => Boolean(l));
+  const passengerPays = legsForTotal.reduce(
+    (sum, leg) =>
+      sum +
+      travellers.reduce((s2, row) => {
+        const tariff = pickTariff(leg.tariffs, row.category, leg.direction as DepartureDirection);
+        return tariff
+          ? s2 + fareFor(row, tariff, currency).contribution
+          : s2;
+      }, 0),
+    0
+  );
+  const depositTotal = depositAmount != null ? depositAmount * depositsDue : 0;
   const barDeposits =
-    depositsDue === 0
-      ? "no deposits"
-      : depositAmount != null
-        ? `${symbol}${(depositAmount * depositsDue).toFixed(2)} deposits`
-        : `${depositsDue} deposit${depositsDue === 1 ? "" : "s"}`;
+    depositsDue === 0 ? "no deposit" : depositAmount != null ? `incl. ${symbol}${depositTotal.toFixed(2)} deposit` : `${depositsDue} deposit${depositsDue === 1 ? "" : "s"}`;
+  const barTotal = `${symbol}${(passengerPays + depositTotal).toFixed(2)}`;
 
   return (
     <div className="space-y-4">
@@ -499,7 +527,9 @@ export function BookingConsole({
               <div className="mt-3">
                 <DepartureInfoPanel
                   label="Return"
-                  departures={initialDepartures.filter((d) => d.id !== outboundId)}
+                  // Only the opposite journey, leaving after the outbound (owner:
+                  // "return can't be London-Antwerp if outbound was the same").
+                  departures={returnCandidates}
                   selectedId={returnId}
                   refreshKey={refreshKey}
                   // Opens on the opposite way to the outbound, from the outbound day on.
@@ -528,6 +558,7 @@ export function BookingConsole({
             depositDefaults={depositDefaults}
             tariffError={outbound ? tariffErrors[outbound.route_id] ?? null : null}
             hasDeparture={Boolean(outbound)}
+            legs={returnEnabled && returnDeparture ? 2 : 1}
           />
         </div>
       </div>
@@ -593,12 +624,13 @@ export function BookingConsole({
 
       {/* Reserve bar: stuck just above the phone tab bar, an ordinary block on md+. */}
       <div className="sticky bottom-[calc(84px+env(safe-area-inset-bottom))] z-20 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur md:static md:shadow-none">
-        <p className="min-w-0 text-sm text-slate-700">
-          <span className="font-semibold text-slate-900">
+        <div className="min-w-0 text-sm text-slate-700">
+          <p className="text-lg font-bold text-slate-900">Total {barTotal}</p>
+          <p>
             {travellers.length} passenger{travellers.length === 1 ? "" : "s"}
-          </span>
-          {returnEnabled ? " · return" : ""} · {barDeposits}
-        </p>
+            {returnEnabled ? " · return" : ""} · {barDeposits}
+          </p>
+        </div>
         <button
           type="button"
           onClick={handleSubmit}

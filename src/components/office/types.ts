@@ -1,4 +1,6 @@
 import type { Currency, PassengerCategory } from "@/types/database";
+import { computeFare } from "@/lib/tariffs/computeFare";
+import type { TariffRow } from "@/lib/tariffs/pickTariff";
 
 /** Default deposit per passenger, per currency (app_settings
  * default_deposit_gbp/eur). null = not configured yet. */
@@ -24,7 +26,9 @@ export interface TravellerRow {
   wheelchairSpace: boolean;
   mobilityNeeds: string;
   luggage: { large: number; small: number; hand: number; oversize: number };
-  contribution: number;
+  /** null = full fare from the price list (the default); a number = what
+   * Office agreed the passenger pays, the charity covering the rest. */
+  contribution: number | null;
   sponsored: number;
   depositWaived: boolean;
   /** True when this row is a passenger with passengers.deposit_waiver_standing
@@ -57,9 +61,18 @@ export function emptyTravellerRow(currency: Currency): TravellerRow {
     wheelchairSpace: false,
     mobilityNeeds: "",
     luggage: { large: 0, small: 0, hand: 1, oversize: 0 },
-    contribution: 0,
+    contribution: null,
     sponsored: 0,
     depositWaived: false,
     standingWaiver: false,
   };
+}
+
+/** Fare for one passenger on one leg; a blank contribution means they pay
+ * the full price-list fare less any sponsorship. */
+export function fareFor(row: TravellerRow, tariff: TariffRow, currency: Currency) {
+  const base = { tariff, currency, luggage: row.luggage, sponsored: row.sponsored };
+  if (row.contribution != null) return computeFare({ ...base, contribution: row.contribution });
+  const full = computeFare({ ...base, contribution: 0 }).notionalFare;
+  return computeFare({ ...base, contribution: Math.max(0, full - row.sponsored) });
 }

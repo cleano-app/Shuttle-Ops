@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import { computeFare } from "@/lib/tariffs/computeFare";
 import { pickTariff, type TariffRow } from "@/lib/tariffs/pickTariff";
 import { buildAddressSnapshot } from "@/lib/addresses/buildSnapshot";
 import {
@@ -12,7 +11,7 @@ import {
   type AddressSuggestion,
   type AreaOption,
 } from "./AddressAutocomplete";
-import { defaultOccupiesSeat, type DepositDefaults, type TravellerRow } from "./types";
+import { defaultOccupiesSeat, type DepositDefaults, type TravellerRow, fareFor } from "./types";
 import type { Currency, DepartureDirection, PassengerCategory } from "@/types/database";
 import { CATEGORY_OPTIONS, categoryLabel } from "@/lib/categories";
 import { Stepper } from "./booking/Stepper";
@@ -43,6 +42,8 @@ interface BookingFormPanelProps {
   depositDefaults?: DepositDefaults;
   tariffError?: string | null;
   hasDeparture?: boolean;
+  /** 2 when a return leg is booked too: fares and contributions count twice. */
+  legs?: number;
 }
 
 /** Snapshot captured onto booking_passengers at booking time (spec §16). */
@@ -97,6 +98,7 @@ export function BookingFormPanel({
   depositDefaults,
   tariffError,
   hasDeparture = false,
+  legs = 1,
 }: BookingFormPanelProps) {
   const depositAmount = depositDefaults?.[currency] ?? null;
   // Rows given their own pickup/drop-off; party changes leave them alone.
@@ -166,7 +168,7 @@ export function BookingFormPanel({
   const fares = travellers.map((row) => {
     const tariff = pickTariff(tariffs, row.category, direction);
     return tariff
-      ? computeFare({ tariff, currency, luggage: row.luggage, contribution: row.contribution, sponsored: row.sponsored })
+      ? fareFor(row, tariff, currency)
       : null;
   });
   const totals = fares.reduce(
@@ -199,7 +201,18 @@ export function BookingFormPanel({
       <Card step={3} title="Who's travelling" action={<span className="text-sm text-slate-500">{travellers.length} in total</span>}>
         <div className="grid grid-cols-1 gap-x-6 divide-y divide-slate-100 sm:grid-cols-2 sm:divide-y-0">
           {CATEGORY_OPTIONS.map((c) => (
-            <StepperRow key={c.value} label={c.label} hint={c.value === "infant" ? "On a lap — no seat" : undefined}>
+            <StepperRow
+              key={c.value}
+              label={c.label}
+              hint={(() => {
+                // Per-head price from the price list (Settings → Price list).
+                const t = hasDeparture ? pickTariff(tariffs, c.value, direction) : null;
+                const base = t ? (currency === "GBP" ? t.base_fare_gbp : t.base_fare_eur) : null;
+                const price = base == null ? null : base === 0 ? "Free" : `${formatMoney(base, currency)} each`;
+                const extra = c.value === "infant" ? "on a lap — no seat" : null;
+                return [price, extra].filter(Boolean).join(" · ") || undefined;
+              })()}
+            >
               <Stepper
                 label={c.label}
                 value={counts[c.value]}
@@ -210,6 +223,15 @@ export function BookingFormPanel({
             </StepperRow>
           ))}
         </div>
+
+        {hasDeparture && travellers.length > 0 && (
+          <p className="mt-2 flex items-baseline justify-between border-t border-slate-100 pt-2 text-sm">
+            <span className="text-slate-600">
+              Fares{legs > 1 ? " (return, both legs)" : ""}
+            </span>
+            <span className="text-base font-semibold text-slate-900">{formatMoney(totals.notional * legs, currency)}</span>
+          </p>
+        )}
 
         <Disclosure summary="Add names (optional)">
           <p className="text-xs text-slate-500">
@@ -433,8 +455,8 @@ export function BookingFormPanel({
               step="0.01"
               inputMode="decimal"
               value={sharedContribution ?? ""}
-              placeholder={sharedContribution == null ? "Varies" : undefined}
-              onChange={(e) => updateAll({ contribution: money(e.target.value) })}
+              placeholder={travellers.every((t) => t.contribution == null) ? "Full fare" : "Varies"}
+              onChange={(e) => updateAll({ contribution: e.target.value === "" ? null : money(e.target.value) })}
               className={`mt-1 ${inputClass}`}
             />
           </label>
@@ -487,12 +509,39 @@ export function BookingFormPanel({
           <div
             className={`mt-3 rounded-lg p-2 text-sm ${invalidRows.length ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-700"}`}
           >
-            <p>
-              <span className="font-medium">Fares {formatMoney(totals.notional, currency)}</span> = contribution{" "}
-              {totals.contribution.toFixed(2)} + sponsored {totals.sponsored.toFixed(2)} + subsidy{" "}
-              {totals.subsidy.toFixed(2)}
-              {totals.luggage > 0 && ` (includes ${totals.luggage.toFixed(2)} luggage charge)`}
-            </p>
+            {(() => {
+              // Bin-booking style receipt (owner, 1 Oct 2026). Prices come
+              // from the price list; the charity covers what the passenger
+              // and any sponsor don't.
+              const L = legs;
+              const line = (label: string, value: number, cls = "") => (
+                <p className={`flex justify-between gap-3 ${cls}`}>
+                  <span>{label}</span>
+                  <span className="tabular-nums">{formatMoney(value, currency)}</span>
+                </p>
+              );
+              const deposits = depositAmount != null ? depositAmount * depositsDue : 0;
+              return (
+                <div className="space-y-1">
+                  {line(`Fares${L > 1 ? " × 2 legs" : ""}`, (totals.notional - totals.luggage) * L)}
+                  {totals.luggage > 0 && line("Extra luggage", totals.luggage * L)}
+                  {totals.sponsored > 0 && line("Sponsored", -totals.sponsored * L, "text-emerald-700")}
+                  {totals.subsidy > 0 && line("Charity covers", -totals.subsidy * L, "text-emerald-700")}
+                  <div className="my-1 border-t border-slate-200" />
+                  {line("Passenger pays", totals.contribution * L, "font-semibold text-slate-900")}
+                  {deposits > 0 && line("Deposit (refundable)", deposits)}
+                  <div className="my-1 border-t border-slate-300" />
+                  {line("Total to collect", totals.contribution * L + deposits, "text-base font-bold text-slate-900")}
+                  <p className="pt-1 text-xs text-slate-500">
+                    Prices from the{" "}
+                    <a href="/office/tariffs" className="underline">
+                      price list
+                    </a>
+                    .
+                  </p>
+                </div>
+              );
+            })()}
             {invalidRows.length > 0 && (
               <p className="mt-1">
                 Contribution + sponsored is more than the fare for{" "}
@@ -535,8 +584,11 @@ export function BookingFormPanel({
                       min={0}
                       step="0.01"
                       inputMode="decimal"
-                      value={row.contribution}
-                      onChange={(e) => updateRow(row.key, { contribution: money(e.target.value) })}
+                      value={row.contribution ?? ""}
+                      placeholder="Full fare"
+                      onChange={(e) =>
+                        updateRow(row.key, { contribution: e.target.value === "" ? null : money(e.target.value) })
+                      }
                       className={`mt-1 ${inputClass}`}
                     />
                   </label>

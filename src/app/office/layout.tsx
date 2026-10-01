@@ -43,12 +43,14 @@ const GROUPS: NavGroup[] = [
       { href: "/office/driver-pay", label: "Driver Pay", icon: "wallet" },
       { href: "/office/reports", label: "Reports", icon: "bar-chart" },
       { href: "/office/accounting", label: "Accounting", icon: "receipt" },
-      { href: "/office/tariffs", label: "Tariffs", icon: "tag" },
     ],
   },
   {
-    heading: "Setup",
+    heading: "Settings",
     items: [
+      // Prices used by the Booking Console and /book (owner: "pricing is
+      // from the price list on settings").
+      { href: "/office/tariffs", label: "Price list", icon: "tag" },
       { href: "/office/areas", label: "Areas", icon: "map-pin" },
       { href: "/office/organizations", label: "Organizations", icon: "building" },
       { href: "/office/team", label: "Team", icon: "user" },
