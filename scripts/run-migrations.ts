@@ -33,6 +33,10 @@ async function main() {
       filename text primary key,
       applied_at timestamptz not null default now()
     );
+    -- Lives in public, so the Data API exposes it. Only this script (the
+    -- table owner, which bypasses RLS) should ever touch it.
+    alter table schema_migrations enable row level security;
+    revoke all on schema_migrations from anon, authenticated;
   `);
 
   const dir = join(__dirname, "..", "supabase", "migrations");
