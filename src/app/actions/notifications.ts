@@ -95,7 +95,7 @@ export async function sendBookingConfirmation(bookingId: string): Promise<Action
     try {
       await sendSms({
         to: passenger.phone,
-        body: `Booking ${booking.reference} confirmed on ${routeName}, departing ${new Date(departAt).toLocaleString("en-GB")}.`,
+        body: `Booking ${booking.reference} confirmed on ${routeName}, departing ${new Date(departAt).toLocaleString("en-GB", { timeZone: "Europe/London" })}.`,
       });
       await logBookingMessage(supabase, {
         booking_id: booking.id,

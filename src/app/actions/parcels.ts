@@ -144,6 +144,17 @@ export async function assignParcelToStop(input: {
   }
 
   const supabase = await createClient();
+  const [{ data: stop, error: stopError }, { data: parcel, error: parcelError }] = await Promise.all([
+    supabase.from("operational_stops").select("departure_id").eq("id", input.operationalStopId).single(),
+    supabase.from("parcels").select("departure_id, status, reference").eq("id", input.parcelId).single(),
+  ]);
+  if (stopError || !stop) return { error: stopError?.message ?? "Stop not found." };
+  if (parcelError || !parcel) return { error: parcelError?.message ?? "Parcel not found." };
+  if (parcel.departure_id !== stop.departure_id) {
+    return { error: `Parcel ${parcel.reference} is booked on a different departure.` };
+  }
+  if (parcel.status === "cancelled") return { error: `Parcel ${parcel.reference} is cancelled.` };
+
   const { error } = await supabase.from("operational_stop_parcels").upsert(
     {
       operational_stop_id: input.operationalStopId,
@@ -154,6 +165,7 @@ export async function assignParcelToStop(input: {
   );
   if (error) return { error: error.message };
 
+  revalidatePath(`/office/dispatch/${stop.departure_id}`);
   return { success: true };
 }
 

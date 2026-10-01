@@ -31,7 +31,7 @@ export default async function DriverVehicleCheckPage({
   const assignment = assignments[0];
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4">
+    <div className="p-4">
       <VehicleCheckForm
         vehicleId={assignment.vehicle_id}
         vehicleRegistration={assignment.vehicle_registration}

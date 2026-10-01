@@ -59,6 +59,7 @@ export async function respondToAssignment(assignmentId: string, accept: boolean)
   });
   if (error) return { error: error.message };
 
+  revalidatePath("/driver", "layout");
   return { success: true };
 }
 
@@ -205,6 +206,19 @@ export async function createHandoverAction(input: {
   });
   if (error) return { error: error.message };
 
+  // §24: the handover is also a duty-log event. Best effort - the
+  // handover record itself is what matters and has already been saved.
+  await supabase.from("driver_duty_events").insert({
+    driver_id: session.userId,
+    vehicle_id: input.vehicleId,
+    departure_id: input.departureId,
+    event_type: "handover",
+    client_id: crypto.randomUUID(),
+    odometer: input.odometer ?? null,
+    note: input.notes ?? null,
+  });
+
+  revalidatePath(`/driver/${input.departureId}`);
   return { success: true, handoverId: (data as { handover_id: string }).handover_id };
 }
 
@@ -270,4 +284,65 @@ export async function reportParcelFailed(operationalStopParcelId: string, reason
   if (error) return { error: error.message };
 
   return { success: true };
+}
+
+// --- Handover context (0059) — the other drivers on this departure and the
+// handovers this driver is party to, for the handover panel. ---
+
+/** RPCs added after src/types/database.ts was last regenerated. */
+type UntypedRpcClient = {
+  rpc: (
+    fn: string,
+    args?: Record<string, unknown>
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+};
+
+export interface HandoverCrewMember {
+  assignment_id: string;
+  driver_id: string;
+  display_name: string;
+  is_me: boolean;
+  role: "driver" | "co_driver";
+  vehicle_id: string;
+  vehicle_registration: string;
+  from_stop_sequence: number | null;
+  to_stop_sequence: number | null;
+  status: string;
+}
+
+export interface HandoverSummary {
+  handover_id: string;
+  direction: "outgoing" | "incoming";
+  from_driver_name: string;
+  to_driver_name: string;
+  vehicle_registration: string;
+  stop_label: string | null;
+  occurred_at: string | null;
+  odometer: number | null;
+  fuel_level: string | null;
+  cash_float_gbp: number | null;
+  cash_float_eur: number | null;
+  passenger_count_confirmed: number | null;
+  parcel_count_confirmed: number | null;
+  keys_transferred: boolean;
+  notes: string | null;
+  from_signed: boolean;
+  to_signed: boolean;
+}
+
+export async function getMyHandoverContext(departureId: string): Promise<{
+  error?: string;
+  crew: HandoverCrewMember[];
+  handovers: HandoverSummary[];
+}> {
+  const session = await getSession();
+  if (!session || !requireDriver(session.role)) return { error: "Not authorized.", crew: [], handovers: [] };
+
+  const supabase = await createClient();
+  const { data, error } = await (supabase as unknown as UntypedRpcClient).rpc("get_driver_handover_context", {
+    p_departure_id: departureId,
+  });
+  if (error) return { error: error.message, crew: [], handovers: [] };
+  const ctx = (data ?? {}) as { crew?: HandoverCrewMember[]; handovers?: HandoverSummary[] };
+  return { crew: ctx.crew ?? [], handovers: ctx.handovers ?? [] };
 }

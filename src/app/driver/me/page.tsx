@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getSession } from "@/lib/auth/session";
-import { logout } from "@/app/actions/auth";
 import { submitExpense } from "@/app/actions/driverPay";
 import { recordCashTransaction } from "@/app/actions/cash";
 import { listPayStatementsForDriver } from "@/app/actions/driverPay";
@@ -49,20 +47,7 @@ export default async function DriverMePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <Link href="/driver" className="text-sm text-slate-500 hover:underline">
-            ← Back
-          </Link>
-          <h1 className="text-lg font-semibold text-slate-900">Me</h1>
-        </div>
-        <form action={logout}>
-          <button type="submit" className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700">
-            Sign out
-          </button>
-        </form>
-      </div>
+    <div className="p-4">
 
       <section className="mb-4 rounded-lg border border-slate-200 bg-white p-4">
         <h2 className="mb-3 font-medium text-slate-900">Log an expense</h2>
@@ -71,7 +56,7 @@ export default async function DriverMePage() {
             <option value="">Not tied to a departure</option>
             {(assignments ?? []).map((a) => (
               <option key={a.departure_id} value={a.departure_id}>
-                {a.route_name} · {a.direction} · {new Date(a.depart_at).toLocaleDateString("en-GB")}
+                {a.route_name} · {a.direction} · {new Date(a.depart_at).toLocaleDateString("en-GB", { timeZone: "Europe/London" })}
               </option>
             ))}
           </select>
@@ -102,7 +87,7 @@ export default async function DriverMePage() {
             <option value="">Not tied to a departure</option>
             {(assignments ?? []).map((a) => (
               <option key={a.departure_id} value={a.departure_id}>
-                {a.route_name} · {a.direction} · {new Date(a.depart_at).toLocaleDateString("en-GB")}
+                {a.route_name} · {a.direction} · {new Date(a.depart_at).toLocaleDateString("en-GB", { timeZone: "Europe/London" })}
               </option>
             ))}
           </select>

@@ -8,6 +8,7 @@ import { assertVehicleAssignable } from "@/app/actions/vehicles";
 export interface ActionResult {
   error?: string;
   success?: boolean;
+  message?: string;
 }
 
 function isDispatcherOrAbove(role: string) {
@@ -34,6 +35,16 @@ export async function assignDriver(input: {
     return { error: "Not authorized." };
   }
 
+  if (!input.driver_id) return { error: "Choose a driver." };
+  if (!input.vehicle_id) return { error: "Choose a vehicle." };
+  if (
+    input.from_stop_sequence != null &&
+    input.to_stop_sequence != null &&
+    input.from_stop_sequence > input.to_stop_sequence
+  ) {
+    return { error: "The segment's first stop must come before its last stop." };
+  }
+
   const supabase = await createClient();
   const { data: vehicle, error: vehicleError } = await supabase
     .from("vehicles")
@@ -41,6 +52,17 @@ export async function assignDriver(input: {
     .eq("id", input.vehicle_id)
     .single();
   if (vehicleError || !vehicle) return { error: "Vehicle not found." };
+
+  const { data: dupes, error: dupeError } = await supabase
+    .from("driver_assignments")
+    .select("id")
+    .eq("departure_id", input.departure_id)
+    .eq("driver_id", input.driver_id)
+    .in("status", ["assigned", "accepted"]);
+  if (dupeError) return { error: dupeError.message };
+  if ((dupes ?? []).length > 0) {
+    return { error: "This driver is already assigned to this departure. Remove that assignment first to change it." };
+  }
 
   const blockReason = await assertVehicleAssignable(
     vehicle.status,

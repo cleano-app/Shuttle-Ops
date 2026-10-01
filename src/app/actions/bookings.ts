@@ -27,6 +27,45 @@ function extractRpcErrorMessage(error: { message: string } | null): string | und
   return error?.message;
 }
 
+type ServerClient = Awaited<ReturnType<typeof createClient>>;
+
+/** Waiver rows for passengers booked with deposit_status "waived" and no
+ * waiver yet (standing waivers and one-off ticks in the console). */
+async function recordBookingTimeWaivers(
+  supabase: ServerClient,
+  bookingIds: string[],
+  userId: string
+): Promise<string | null> {
+  if (bookingIds.length === 0) return null;
+  const { data: rows, error } = await supabase
+    .from("booking_passengers")
+    .select("id, passengers(deposit_waiver_standing)")
+    .in("booking_id", bookingIds)
+    .eq("deposit_status", "waived")
+    .is("waiver_id", null);
+  if (error) return error.message;
+  for (const row of rows ?? []) {
+    const standing = (row as unknown as { passengers?: { deposit_waiver_standing?: boolean } }).passengers
+      ?.deposit_waiver_standing;
+    const { data: waiver, error: insertError } = await supabase
+      .from("waivers")
+      .insert({
+        booking_passenger_id: row.id,
+        reason_code: standing ? "standing_waiver" : "waived_at_booking",
+        granted_by_user_id: userId,
+      })
+      .select("id")
+      .single();
+    if (insertError) return insertError.message;
+    const { error: linkError } = await supabase
+      .from("booking_passengers")
+      .update({ waiver_id: waiver.id })
+      .eq("id", row.id);
+    if (linkError) return linkError.message;
+  }
+  return null;
+}
+
 /** Single-leg provisional booking. */
 export async function createProvisionalBooking(input: {
   leadPassengerId: string;
@@ -49,9 +88,15 @@ export async function createProvisionalBooking(input: {
   });
   if (error) return { error: extractRpcErrorMessage(error) };
 
+  const result = data as AllocateBookingResult;
+  const waiverError = await recordBookingTimeWaivers(supabase, [result.booking_id], session.userId);
+  if (waiverError) {
+    return { error: `Booked (${result.reference}), but the waiver could not be recorded: ${waiverError}` };
+  }
+
   revalidatePath("/office/booking-console");
   revalidatePath(`/office/departures/${input.leg.departure_id}`);
-  return { success: true, result: data as AllocateBookingResult };
+  return { success: true, result };
 }
 
 /**
@@ -79,10 +124,19 @@ export async function createProvisionalTripBooking(input: {
   });
   if (error) return { error: extractRpcErrorMessage(error) };
 
+  const result = data as AllocateTripResult;
+  // A deposit waived at booking time is still an Office decision with a
+  // named decision-maker (spec §10) — record the waiver row for it.
+  const bookingIds = [result.outbound?.booking_id, result.return?.booking_id].filter(Boolean) as string[];
+  const waiverError = await recordBookingTimeWaivers(supabase, bookingIds, session.userId);
+  if (waiverError) {
+    return { error: `Booked (${result.reference}), but the waiver could not be recorded: ${waiverError}` };
+  }
+
   revalidatePath("/office/booking-console");
   revalidatePath(`/office/departures/${input.outbound.departure_id}`);
   if (input.return) revalidatePath(`/office/departures/${input.return.departure_id}`);
-  return { success: true, result: data as AllocateTripResult };
+  return { success: true, result };
 }
 
 async function transitionBookingPassengerStatus(
@@ -99,13 +153,17 @@ async function transitionBookingPassengerStatus(
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("booking_passengers")
-    .select("id, status, booking_id")
+    .select("id, status, booking_id, deposit_status, bookings(departure_id)")
     .eq("id", id)
     .single();
 
   if (!row) return { error: "Booking passenger not found." };
   if (!from.includes(row.status)) {
     return { error: `Must be one of ${from.join("/")} to do this (currently "${row.status}").` };
+  }
+  // Spec §1.3: confirmation needs the deposit secured or an approved waiver.
+  if (to === "confirmed" && !["secured", "waived", "not_required"].includes(row.deposit_status)) {
+    return { error: "Take the deposit or waive it before confirming." };
   }
 
   const { error } = await supabase
@@ -115,6 +173,8 @@ async function transitionBookingPassengerStatus(
   if (error) return { error: error.message };
 
   revalidatePath("/office/booking-console");
+  const departureId = (row as unknown as { bookings?: { departure_id?: string } }).bookings?.departure_id;
+  if (departureId) revalidatePath(`/office/departures/${departureId}`);
   return { success: true };
 }
 
@@ -169,6 +229,7 @@ export async function markNoShow(id: string): Promise<ActionResult> {
   }
 
   revalidatePath("/office/booking-console");
+  revalidatePath("/office/departures/[id]", "page");
   return { success: true };
 }
 
@@ -187,7 +248,7 @@ export async function expireStaleProvisionalBookings(departureId?: string): Prom
   let query = supabase
     .from("bookings")
     .select("id, departure_id")
-    .eq("status", "provisional")
+    .in("status", ["provisional", "deposit_pending"])
     .lt("provisional_expires_at", new Date().toISOString());
   if (departureId) query = query.eq("departure_id", departureId);
 
@@ -195,14 +256,18 @@ export async function expireStaleProvisionalBookings(departureId?: string): Prom
   if (error) return { error: error.message };
   if (!staleBookings || staleBookings.length === 0) return { success: true };
 
+  // Only passengers still unsecured expire; the booking row follows its
+  // passengers (trigger, migration 0056). No revalidatePath here: this runs
+  // while the booking console and departure pages render, which Next
+  // forbids, and those pages read the data after calling it anyway.
   const ids = staleBookings.map((b) => b.id);
-  await supabase.from("bookings").update({ status: "expired" }).in("id", ids);
-  await supabase
+  const { error: expireError } = await supabase
     .from("booking_passengers")
     .update({ status: "expired" })
     .in("booking_id", ids)
-    .in("status", ["provisional", "deposit_pending"]);
+    .in("status", ["provisional", "deposit_pending"])
+    .not("deposit_status", "in", "(secured,waived)");
+  if (expireError) return { error: expireError.message };
 
-  revalidatePath("/office/booking-console");
   return { success: true };
 }

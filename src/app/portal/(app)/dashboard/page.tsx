@@ -27,7 +27,7 @@ export default async function PortalDashboardPage() {
                 {d.route_name} · {d.direction}
               </p>
               <p className="text-sm text-slate-600">
-                {new Date(d.depart_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+                {new Date(d.depart_at).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "short" })}
               </p>
               <p className="text-sm text-slate-500">
                 {d.seats_available} {t("book_seats_available")}

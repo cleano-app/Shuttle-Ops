@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   arriveAtStop,
   departStop,
@@ -15,7 +14,8 @@ import {
 } from "@/app/actions/driver";
 import { enqueueAction, registerExecutor, initOfflineQueue, type QueuedAction } from "@/lib/offline/queue";
 import { useOfflineQueueStatus } from "@/lib/offline/useOfflineQueue";
-import type { DriverStopManifest, DutyEventType } from "@/types/database";
+import type { DriverManifestParcel, DriverManifestStop, DriverStopManifest, DutyEventType } from "@/types/database";
+import { formatUk } from "@/lib/time";
 
 interface DriverRouteScreenProps {
   departureId: string;
@@ -23,6 +23,32 @@ interface DriverRouteScreenProps {
   initialManifest: DriverStopManifest;
   crossingReference: string | null;
   crossingCheckinDeadline: string | null;
+  /** Shown above the stops (e.g. the Accept banner). */
+  banner?: ReactNode;
+  /** Shown below the stops (manifest download, handover). */
+  footer?: ReactNode;
+}
+
+/** A parcel still needs the driver at this stop: collections until it's
+ * aboard, deliveries until delivered (an "onboard" parcel at its delivery
+ * stop is exactly the one to hand over). */
+function parcelOutstanding(p: DriverManifestParcel) {
+  if (p.status === "cancelled" || p.status.startsWith("failed")) return false;
+  if (p.role === "collection") return !["collected", "onboard", "delivery_due", "delivered"].includes(p.status);
+  return p.status !== "delivered";
+}
+
+function stopSummary(s: DriverManifestStop) {
+  const parts: string[] = [];
+  const people = s.passengers.filter((p) => !p.no_show).length;
+  if (people) parts.push(`${people} passenger${people === 1 ? "" : "s"}`);
+  const cases = s.passengers.reduce((n, p) => n + p.luggage_large + p.luggage_small, 0);
+  if (cases) parts.push(`${cases} case${cases === 1 ? "" : "s"}`);
+  const collect = s.parcels.filter((p) => p.role === "collection").length;
+  const deliver = s.parcels.filter((p) => p.role === "delivery").length;
+  if (collect) parts.push(`collect ${collect} parcel${collect === 1 ? "" : "s"}`);
+  if (deliver) parts.push(`deliver ${deliver} parcel${deliver === 1 ? "" : "s"}`);
+  return parts.join(" · ");
 }
 
 const DUTY_EVENTS: { type: DutyEventType; label: string }[] = [
@@ -47,6 +73,8 @@ export function DriverRouteScreen({
   initialManifest,
   crossingReference,
   crossingCheckinDeadline,
+  banner,
+  footer,
 }: DriverRouteScreenProps) {
   const [manifest, setManifest] = useState<DriverStopManifest>(initialManifest);
   const [problemNote, setProblemNote] = useState("");
@@ -210,9 +238,9 @@ export function DriverRouteScreen({
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
-      {/* Duty state bar */}
-      <div className="flex items-center gap-2 overflow-x-auto border-b bg-white p-3">
+    <div className="flex flex-col">
+      {/* Duty state bar - Vehicle check / Me live in the shell's bottom bar. */}
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-hairline bg-white p-3">
         {DUTY_EVENTS.map((e) => (
           <button
             key={e.type}
@@ -222,42 +250,36 @@ export function DriverRouteScreen({
             {e.label}
           </button>
         ))}
-        <Link
-          href="/driver/check"
-          className="shrink-0 rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 active:bg-slate-100"
-        >
-          Vehicle check
-        </Link>
-        <Link
-          href="/driver/me"
-          className="shrink-0 rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 active:bg-slate-100"
-        >
-          Me
-        </Link>
       </div>
 
       {crossingReference && (
         <div className="bg-brand-dark p-3 text-center text-white">
           <p className="text-sm font-medium">
             Crossing check-in:{" "}
-            {crossingCheckinDeadline
-              ? new Date(crossingCheckinDeadline).toLocaleTimeString("en-GB", { timeStyle: "short" })
-              : "—"}
+            {crossingCheckinDeadline ? formatUk(crossingCheckinDeadline, { time: "short" }) : "—"}
           </p>
           <p className="text-xs opacity-90">Ref {crossingReference}</p>
         </div>
       )}
 
       <div className="flex-1 p-4">
+        {banner && <div className="mb-4">{banner}</div>}
         {!currentStop ? (
           <div className="rounded-lg border border-slate-200 bg-white p-6 text-center text-slate-600">
             No more stops on your segment. Check with the office if you expected more.
           </div>
         ) : (
           <div className="rounded-lg border border-slate-300 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {currentStop.status === "arrived" ? "At stop" : "Next stop"}
-            </p>
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {currentStop.status === "arrived" ? "At stop" : "Next stop"}
+              </p>
+              {currentStop.planned_arrival_at && (
+                <p className="text-sm font-medium text-slate-600">
+                  ETA {formatUk(currentStop.planned_arrival_at, { time: "short" })}
+                </p>
+              )}
+            </div>
             <h2 className="mt-1 text-xl font-bold text-slate-900">
               {currentStop.address.fixed_point_name ?? currentStop.address.line1}
             </h2>
@@ -267,6 +289,10 @@ export function DriverRouteScreen({
             {currentStop.address.access_notes && (
               <p className="mt-1 text-sm text-amber-700">{currentStop.address.access_notes}</p>
             )}
+            {currentStop.driver_notes && (
+              <p className="mt-1 whitespace-pre-line text-sm text-amber-700">{currentStop.driver_notes}</p>
+            )}
+            {stopSummary(currentStop) && <p className="mt-1 text-sm text-slate-600">{stopSummary(currentStop)}</p>}
 
             {currentStop.passengers.length > 0 && (
               <div className="mt-4">
@@ -309,7 +335,7 @@ export function DriverRouteScreen({
                 <p className="mb-2 text-sm font-semibold text-slate-700">Parcels</p>
                 <ul className="space-y-2">
                   {currentStop.parcels.map((p) => {
-                    const done = p.status === "delivered" || p.status === "onboard" || p.status.startsWith("failed");
+                    const done = !parcelOutstanding(p);
                     return (
                       <li
                         key={p.operational_stop_parcel_id}
@@ -423,12 +449,23 @@ export function DriverRouteScreen({
             <ul className="space-y-1">
               {upcomingStops.map((s) => (
                 <li key={s.stop_id} className="rounded border border-slate-200 bg-white p-2 text-sm text-slate-600">
-                  {s.address.fixed_point_name ?? s.address.line1}
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-medium text-slate-800">{s.address.fixed_point_name ?? s.address.line1}</span>
+                    {s.planned_arrival_at && (
+                      <span className="shrink-0 text-xs text-slate-500">{formatUk(s.planned_arrival_at, { time: "short" })}</span>
+                    )}
+                  </div>
+                  {stopSummary(s) && <p className="text-xs text-slate-500">{stopSummary(s)}</p>}
+                  {s.parcels.length > 0 && (
+                    <p className="text-xs text-slate-500">📦 {s.parcels.map((p) => p.reference).join(", ")}</p>
+                  )}
                 </li>
               ))}
             </ul>
           </div>
         )}
+
+        {footer}
       </div>
 
       {/* Sync indicator — build spec §24: "Visible sync indicator." */}

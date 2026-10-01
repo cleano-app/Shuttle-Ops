@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { searchPassengers, createPassenger } from "@/app/actions/passengers";
 import type { PassengerCategory } from "@/types/database";
+import { addressLabel, type AddressOption } from "./AddressAutocomplete";
 
 export interface PassengerSummary {
   id: string;
@@ -20,20 +21,33 @@ export interface PassengerSummary {
 
 interface PassengerLookupPanelProps {
   selected: PassengerSummary | null;
-  onSelect: (passenger: PassengerSummary) => void;
+  onSelect: (passenger: PassengerSummary | null) => void;
+  defaultPickup?: AddressOption | null;
+  defaultDropoff?: AddressOption | null;
+  defaultsError?: string | null;
 }
 
+const inputClass = "w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm";
+
 /**
- * Build spec §32 "Caller" panel: passenger search, previous trips (deferred
- * — no trip-history query in Phase 1's console, count shown is no-show/
- * late-cancel only), standing waiver, language, mobility needs, default
- * addresses. New-passenger creation is inline so the operator never has to
- * leave the console mid-call.
+ * Build spec §32 "Caller" panel: passenger search, no-show/late-cancel
+ * counts, standing waiver, language and default addresses. New-passenger
+ * creation is inline so the operator never has to leave the console
+ * mid-call.
  */
-export function PassengerLookupPanel({ selected, onSelect }: PassengerLookupPanelProps) {
+export function PassengerLookupPanel({
+  selected,
+  onSelect,
+  defaultPickup,
+  defaultDropoff,
+  defaultsError,
+}: PassengerLookupPanelProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PassengerSummary[]>([]);
+  const [searched, setSearched] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleSearch(next: string) {
@@ -42,28 +56,41 @@ export function PassengerLookupPanel({ selected, onSelect }: PassengerLookupPane
     debounceRef.current = setTimeout(async () => {
       if (next.trim().length < 2) {
         setResults([]);
+        setSearched(false);
         return;
       }
-      const { results: found } = await searchPassengers(next);
-      setResults((found ?? []) as PassengerSummary[]);
+      const res = await searchPassengers(next);
+      setError(res.error ? `Search failed: ${res.error}` : null);
+      setResults((res.results ?? []) as PassengerSummary[]);
+      setSearched(true);
     }, 250);
   }
 
   async function handleCreate(formData: FormData) {
     const full_name = String(formData.get("full_name") ?? "").trim();
     const category = String(formData.get("category") ?? "man") as PassengerCategory;
-    if (!full_name) return;
-    const { id, error } = await createPassenger({
+    const phone = String(formData.get("phone") ?? "").trim() || null;
+    if (!full_name) {
+      setError("Enter the caller's full name.");
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    const { id, error: createError } = await createPassenger({
       full_name,
       category,
-      phone: String(formData.get("phone") ?? "") || null,
+      phone,
       created_via: "phone",
     });
-    if (error || !id) return;
+    setSaving(false);
+    if (createError || !id) {
+      setError(createError ?? "Could not create the passenger.");
+      return;
+    }
     onSelect({
       id,
       full_name,
-      phone: String(formData.get("phone") ?? "") || null,
+      phone,
       email: null,
       category,
       preferred_language: null,
@@ -76,6 +103,7 @@ export function PassengerLookupPanel({ selected, onSelect }: PassengerLookupPane
     setCreating(false);
     setQuery("");
     setResults([]);
+    setSearched(false);
   }
 
   return (
@@ -86,22 +114,32 @@ export function PassengerLookupPanel({ selected, onSelect }: PassengerLookupPane
         <div className="space-y-1 text-sm">
           <p className="text-base font-semibold text-slate-900">{selected.full_name}</p>
           <p className="text-slate-600">{selected.phone ?? "No phone on file"}</p>
+          <p className="capitalize text-slate-600">{selected.category}</p>
           {selected.preferred_language && (
             <p className="text-slate-600">Language: {selected.preferred_language}</p>
           )}
           {selected.deposit_waiver_standing && (
-            <p className="rounded bg-amber-50 px-2 py-1 text-amber-800">
-              Standing deposit waiver on file
-            </p>
+            <p className="rounded bg-amber-50 px-2 py-1 text-amber-800">Standing deposit waiver on file</p>
           )}
-          <p className="text-slate-600">
+          <p className={selected.no_show_count > 0 ? "font-medium text-amber-800" : "text-slate-600"}>
             No-shows: {selected.no_show_count} · Late cancels: {selected.late_cancel_count}
           </p>
-          <button
-            type="button"
-            onClick={() => onSelect(null as unknown as PassengerSummary)}
-            className="mt-2 text-sm text-slate-500 underline"
-          >
+          <div className="pt-1 text-slate-600">
+            <p>
+              <span className="text-slate-500">Default pickup:</span>{" "}
+              {defaultPickup ? addressLabel(defaultPickup) : selected.default_pickup_address_id ? "Loading..." : "none"}
+            </p>
+            <p>
+              <span className="text-slate-500">Default drop-off:</span>{" "}
+              {defaultDropoff
+                ? addressLabel(defaultDropoff)
+                : selected.default_dropoff_address_id
+                  ? "Loading..."
+                  : "none"}
+            </p>
+            {defaultsError && <p className="text-red-700">Couldn&apos;t load default addresses: {defaultsError}</p>}
+          </div>
+          <button type="button" onClick={() => onSelect(null)} className="mt-2 text-sm text-slate-500 underline">
             Change caller
           </button>
         </div>
@@ -111,8 +149,17 @@ export function PassengerLookupPanel({ selected, onSelect }: PassengerLookupPane
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder="Search by name..."
-            className="mb-2 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+            aria-label="Search passengers by name"
+            className={`mb-2 ${inputClass}`}
           />
+          {error && (
+            <p role="alert" className="mb-2 rounded bg-red-50 p-2 text-sm text-red-700">
+              {error}
+            </p>
+          )}
+          {searched && results.length === 0 && !error && (
+            <p className="mb-2 text-sm text-slate-500">No passenger found. Add them as a new passenger.</p>
+          )}
           {results.length > 0 && (
             <ul className="mb-3 max-h-48 overflow-auto rounded border border-slate-200">
               {results.map((p) => (
@@ -132,27 +179,15 @@ export function PassengerLookupPanel({ selected, onSelect }: PassengerLookupPane
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="text-sm font-medium text-brand-dark underline"
+              className="text-sm font-medium text-blue-900 underline"
             >
               + New passenger
             </button>
           ) : (
-            <form
-              action={handleCreate}
-              className="space-y-2 rounded border border-slate-200 p-3"
-            >
-              <input
-                name="full_name"
-                placeholder="Full name"
-                required
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-              <input
-                name="phone"
-                placeholder="Phone"
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-              <select name="category" className="w-full rounded border border-slate-300 px-3 py-2 text-sm">
+            <form action={handleCreate} className="space-y-2 rounded border border-slate-200 p-3">
+              <input name="full_name" defaultValue={query} placeholder="Full name" required className={inputClass} />
+              <input name="phone" placeholder="Phone" type="tel" className={inputClass} />
+              <select name="category" aria-label="Category" className={inputClass}>
                 <option value="man">Man</option>
                 <option value="woman">Woman</option>
                 <option value="boy">Boy</option>
@@ -160,8 +195,12 @@ export function PassengerLookupPanel({ selected, onSelect }: PassengerLookupPane
                 <option value="infant">Infant</option>
               </select>
               <div className="flex gap-2">
-                <button type="submit" className="rounded bg-brand-dark px-3 py-1.5 text-sm font-medium text-white">
-                  Save
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="rounded bg-blue-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {saving ? "Saving..." : "Save"}
                 </button>
                 <button
                   type="button"

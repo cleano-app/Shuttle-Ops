@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth/session";
 import type { DepartureDirection, DepartureStatus } from "@/types/database";
+import { isoHoursFromNow } from "@/lib/time";
 
 export interface ActionResult {
   error?: string;
@@ -29,6 +30,7 @@ export async function listBookableDepartures() {
     .from("departures")
     .select("id, direction, depart_at, status, seats_capacity, seats_released, route_id, routes(name)")
     .in("status", ["draft", "published", "boarding"])
+    .gte("depart_at", isoHoursFromNow(-6))
     .order("depart_at", { ascending: true });
   if (error) return { error: error.message, departures: [] };
 
@@ -73,6 +75,7 @@ export async function createDeparture(input: {
   depart_at: string;
   arrive_estimate?: string | null;
   seats_capacity: number;
+  seats_released?: number;
   hold_capacity_units?: number;
   wheelchair_capacity?: number;
   crossing_reference?: string | null;

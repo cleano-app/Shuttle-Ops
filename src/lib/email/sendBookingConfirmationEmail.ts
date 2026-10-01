@@ -31,6 +31,7 @@ export async function sendBookingConfirmationEmail(
 
   const resend = new Resend(process.env.RESEND_API_KEY);
   const departDate = new Date(input.departAt).toLocaleString("en-GB", {
+    timeZone: "Europe/London",
     dateStyle: "full",
     timeStyle: "short",
   });

@@ -89,3 +89,21 @@ export async function updateAddress(
   revalidatePath("/office/booking-console");
   return { success: true };
 }
+
+/**
+ * Fetches specific addresses by id — used by the Booking Console to show a
+ * caller's default pickup/drop-off addresses at the top of the address
+ * picker (build spec §16 "show passenger defaults").
+ */
+export async function getAddressesByIds(ids: string[]) {
+  const session = await getSession();
+  if (!session) return { error: "Not authenticated.", addresses: [] };
+  const wanted = ids.filter(Boolean);
+  if (wanted.length === 0) return { addresses: [] };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("addresses").select("*").in("id", wanted);
+  if (error) return { error: error.message, addresses: [] };
+
+  return { addresses: data ?? [] };
+}

@@ -1,5 +1,9 @@
 import type { Currency, PassengerCategory } from "@/types/database";
 
+/** Default deposit per passenger, per currency (app_settings
+ * default_deposit_gbp/eur). null = not configured yet. */
+export type DepositDefaults = Record<Currency, number | null>;
+
 /** One row in the Booking Console's traveller list — the client-side shape
  * that gets turned into a BookingPassengerInput (src/types/database.ts) at
  * submit time. Kept separate from BookingPassengerInput because this shape
@@ -23,6 +27,9 @@ export interface TravellerRow {
   contribution: number;
   sponsored: number;
   depositWaived: boolean;
+  /** True when this row is a passenger with passengers.deposit_waiver_standing
+   * — the waiver auto-applies (build spec §10) and can't be unticked here. */
+  standingWaiver: boolean;
 }
 
 export function defaultOccupiesSeat(category: PassengerCategory): boolean {
@@ -53,5 +60,6 @@ export function emptyTravellerRow(currency: Currency): TravellerRow {
     contribution: 0,
     sponsored: 0,
     depositWaived: false,
+    standingWaiver: false,
   };
 }

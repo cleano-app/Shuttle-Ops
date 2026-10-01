@@ -1,18 +1,19 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getPortalSession } from "@/lib/auth/portalSession";
 import { getLocale } from "@/lib/i18n/getLocale";
 import { getTranslator } from "@/lib/i18n/translate";
 import { portalLogout } from "@/app/actions/portalAuth";
 import { LanguageSwitcher } from "@/components/portal/LanguageSwitcher";
+import { PortalShell } from "@/components/shell/PortalShell";
+import type { NavItem } from "@/components/shell/nav";
 
 const NAV = [
-  { href: "/portal/dashboard", key: "nav_dashboard" as const },
-  { href: "/portal/book", key: "nav_book" as const },
-  { href: "/portal/bookings", key: "nav_bookings" as const },
-  { href: "/portal/addresses", key: "nav_addresses" as const },
-  { href: "/portal/parcels", key: "nav_parcels" as const },
-  { href: "/portal/profile", key: "nav_profile" as const },
+  { href: "/portal/dashboard", key: "nav_dashboard" as const, icon: "home" as const },
+  { href: "/portal/book", key: "nav_book" as const, icon: "ticket" as const },
+  { href: "/portal/bookings", key: "nav_bookings" as const, icon: "calendar" as const },
+  { href: "/portal/addresses", key: "nav_addresses" as const, icon: "map-pin" as const },
+  { href: "/portal/parcels", key: "nav_parcels" as const, icon: "package" as const },
+  { href: "/portal/profile", key: "nav_profile" as const, icon: "user" as const },
 ];
 
 export default async function PortalAppLayout({ children }: { children: React.ReactNode }) {
@@ -26,38 +27,19 @@ export default async function PortalAppLayout({ children }: { children: React.Re
   const locale = await getLocale();
   const t = getTranslator(locale);
 
+  const items: NavItem[] = NAV.map((item) => ({ href: item.href, label: t(item.key), icon: item.icon }));
+
+  // lang/dir are set by the parent portal/layout.tsx wrapper.
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white">
-        <div className="flex items-center justify-between gap-3 px-4 pt-3">
-          <Link href="/portal/dashboard" className="text-lg font-semibold text-slate-900">
-            {t("app_name")}
-          </Link>
-          <div className="flex items-center gap-2">
-            <LanguageSwitcher current={locale} />
-            <form action={portalLogout}>
-              <button
-                type="submit"
-                className="rounded border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                {t("nav_sign_out")}
-              </button>
-            </form>
-          </div>
-        </div>
-        <nav className="flex items-center gap-2 overflow-x-auto px-4 py-3">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="shrink-0 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-            >
-              {t(item.key)}
-            </Link>
-          ))}
-        </nav>
-      </header>
-      <main className="mx-auto max-w-3xl p-4">{children}</main>
-    </div>
+    <PortalShell
+      homeHref="/portal/dashboard"
+      brandName={t("app_name")}
+      items={items}
+      signOutAction={portalLogout}
+      signOutLabel={t("nav_sign_out")}
+      languageSwitcher={<LanguageSwitcher current={locale} />}
+    >
+      {children}
+    </PortalShell>
   );
 }

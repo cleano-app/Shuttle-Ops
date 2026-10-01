@@ -53,6 +53,7 @@ export async function recordDeposit(input: {
   if (bpError) return { error: bpError.message };
 
   revalidatePath("/office/booking-console");
+  revalidatePath("/office/departures/[id]", "page");
   return { success: true };
 }
 
@@ -77,6 +78,7 @@ export async function releaseDeposit(depositId: string): Promise<ActionResult> {
     .eq("id", deposit.booking_passenger_id);
 
   revalidatePath("/office/booking-console");
+  revalidatePath("/office/departures/[id]", "page");
   return { success: true };
 }
 
@@ -118,6 +120,7 @@ export async function retainDeposit(input: {
     .eq("id", deposit.booking_passenger_id);
 
   revalidatePath("/office/booking-console");
+  revalidatePath("/office/departures/[id]", "page");
   return { success: true };
 }
 
@@ -147,5 +150,6 @@ export async function waiveDeposit(input: {
   if (bpError) return { error: bpError.message };
 
   revalidatePath("/office/booking-console");
+  revalidatePath("/office/departures/[id]", "page");
   return { success: true };
 }

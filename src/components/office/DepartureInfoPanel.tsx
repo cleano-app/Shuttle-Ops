@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { getDepartureCapacitySummary } from "@/app/actions/departures";
+import { formatUk } from "@/lib/time";
 
 export interface DepartureOption {
   id: string;
@@ -12,9 +14,16 @@ export interface DepartureOption {
   seats_released: number;
   route_id: string;
   routeName: string;
+  /** seats_released - seats_used at page load (refreshed after each booking). */
+  seatsLeft?: number | null;
 }
 
 interface DepartureCapacitySummary {
+  seats_capacity: number;
+  seats_released: number;
+  hold_capacity_units: number | null;
+  wheelchair_capacity: number | null;
+  crossing_passenger_limit: number | null;
   seats_used: number;
   crossing_headcount: number;
   hold_used: number;
@@ -25,6 +34,9 @@ interface DepartureCapacitySummary {
   boys: number;
   girls: number;
   infants: number;
+  luggage_units_used?: number;
+  parcel_units_used?: number;
+  parcel_count?: number;
 }
 
 interface DepartureInfoPanelProps {
@@ -32,35 +44,62 @@ interface DepartureInfoPanelProps {
   departures: DepartureOption[];
   selectedId: string | null;
   onSelect: (departure: DepartureOption | null) => void;
+  /** Bump to re-fetch the live capacity summary (e.g. after a booking). */
+  refreshKey?: number;
+}
+
+export function departureOptionLabel(d: DepartureOption, withSeats = true): string {
+  const when = formatUk(d.depart_at, { date: "medium", time: "short" });
+  const seats =
+    !withSeats || d.seatsLeft == null ? "" : d.seatsLeft === 0 ? " · FULL" : ` · ${d.seatsLeft} seat${d.seatsLeft === 1 ? "" : "s"} left`;
+  return `${when} · ${d.routeName} · ${d.direction}${seats}`;
+}
+
+function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+  return (
+    <div className={`rounded border px-2 py-1.5 ${warn ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
+      <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className={`text-sm font-semibold ${warn ? "text-amber-900" : "text-slate-900"}`}>{value}</p>
+    </div>
+  );
 }
 
 /**
  * Build spec §32 "Departure" panel — direction/date picker plus live
  * capacity (seats, hold, wheelchair, provisional share, composition,
- * status). Reads departure_capacity_summary (0020), a display-only view;
+ * status). Reads departure_capacity_summary, a display-only view;
  * allocate_booking_capacity() remains the sole source of truth for whether
  * a booking is actually allowed.
  */
-export function DepartureInfoPanel({ label, departures, selectedId, onSelect }: DepartureInfoPanelProps) {
+export function DepartureInfoPanel({ label, departures, selectedId, onSelect, refreshKey = 0 }: DepartureInfoPanelProps) {
   const [summary, setSummary] = useState<DepartureCapacitySummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const selected = departures.find((d) => d.id === selectedId) ?? null;
 
   useEffect(() => {
     let cancelled = false;
     if (!selectedId) return;
     getDepartureCapacitySummary(selectedId).then((res) => {
-      if (!cancelled && "summary" in res) setSummary((res.summary as DepartureCapacitySummary) ?? null);
+      if (cancelled) return;
+      if ("error" in res && res.error) {
+        setSummaryError(res.error);
+        setSummary(null);
+      } else {
+        setSummaryError(null);
+        setSummary(("summary" in res ? (res.summary as DepartureCapacitySummary | null) : null) ?? null);
+      }
+      setLoadedFor(selectedId);
     });
     return () => {
       cancelled = true;
     };
-  }, [selectedId]);
+  }, [selectedId, refreshKey]);
 
-  // Rather than resetting `summary` to null synchronously inside the effect
-  // above when selectedId clears, derive the displayed value at render
-  // time — the stale summary is simply never shown once nothing is
-  // selected, with no extra setState/render pass needed for the reset.
-  const displaySummary = selectedId ? summary : null;
+  // Never show a previous departure's numbers against a new selection.
+  const displaySummary = selectedId && loadedFor === selectedId ? summary : null;
+  const seatsLeft = displaySummary ? Math.max(0, displaySummary.seats_released - displaySummary.seats_used) : null;
+  const selectedMissing = selectedId && !selected;
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4">
@@ -71,36 +110,96 @@ export function DepartureInfoPanel({ label, departures, selectedId, onSelect }: 
           const found = departures.find((d) => d.id === e.target.value) ?? null;
           onSelect(found);
         }}
-        className="mb-3 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+        aria-label={label}
+        className="mb-3 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm"
       >
-        <option value="">Select a departure...</option>
+        <option value="">
+          {departures.length === 0 ? "No published departures coming up" : "Select a departure..."}
+        </option>
         {departures.map((d) => (
+          // Full departures stay selectable: Office may still waitlist the caller.
           <option key={d.id} value={d.id}>
-            {d.routeName} · {d.direction} ·{" "}
-            {new Date(d.depart_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} (
-            {d.status})
+            {departureOptionLabel(d)}
           </option>
         ))}
       </select>
 
+      {selectedMissing && (
+        <p className="mb-2 rounded bg-amber-50 p-2 text-sm text-amber-900">
+          This departure is no longer open for booking. Pick another.
+        </p>
+      )}
+
       {selected && (
-        <div className="space-y-2 text-sm">
-          <p className="text-slate-600">
-            Seats released: <span className="font-medium">{selected.seats_released}</span> of{" "}
-            {selected.seats_capacity}
-          </p>
+        <div className="space-y-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-slate-700">
+              <span className="font-medium">{formatUk(selected.depart_at, { date: "full", time: "short" })}</span>
+              <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium capitalize text-green-800">
+                {selected.status}
+              </span>
+            </p>
+            <Link href={`/office/departures/${selected.id}`} className="text-sm font-medium text-blue-900 underline">
+              Open departure
+            </Link>
+          </div>
+
+          {summaryError && (
+            <p role="alert" className="rounded bg-red-50 p-2 text-red-700">
+              Couldn&apos;t load live capacity: {summaryError}
+            </p>
+          )}
+
+          {!displaySummary && !summaryError && <p className="text-slate-500">Loading capacity...</p>}
+
           {displaySummary && (
             <>
+              <div className="grid grid-cols-2 gap-2">
+                <Stat
+                  label="Seats left"
+                  value={`${seatsLeft} of ${displaySummary.seats_released}`}
+                  warn={seatsLeft !== null && seatsLeft <= 2}
+                />
+                <Stat label="Seats used" value={`${displaySummary.seats_used} (${displaySummary.seats_capacity} fitted)`} />
+                <Stat
+                  label="Hold units"
+                  value={
+                    displaySummary.hold_capacity_units != null
+                      ? `${displaySummary.hold_used} / ${displaySummary.hold_capacity_units}`
+                      : String(displaySummary.hold_used)
+                  }
+                  warn={
+                    displaySummary.hold_capacity_units != null &&
+                    displaySummary.hold_used >= displaySummary.hold_capacity_units
+                  }
+                />
+                <Stat
+                  label="Wheelchair"
+                  value={
+                    displaySummary.wheelchair_capacity != null
+                      ? `${displaySummary.wheelchair_used} / ${displaySummary.wheelchair_capacity}`
+                      : String(displaySummary.wheelchair_used)
+                  }
+                />
+                <Stat
+                  label="Crossing headcount"
+                  value={
+                    displaySummary.crossing_passenger_limit != null
+                      ? `${displaySummary.crossing_headcount} / ${displaySummary.crossing_passenger_limit}`
+                      : String(displaySummary.crossing_headcount)
+                  }
+                />
+                <Stat label="Provisional (unsecured)" value={String(displaySummary.unsecured_count)} />
+              </div>
+              {displaySummary.hold_used > 0 && displaySummary.luggage_units_used !== undefined && (
+                <p className="text-xs text-slate-500">
+                  Hold: luggage {displaySummary.luggage_units_used} · parcels {displaySummary.parcel_units_used ?? 0} (
+                  {displaySummary.parcel_count ?? 0} parcels)
+                </p>
+              )}
               <p className="text-slate-600">
-                Used: <span className="font-medium">{displaySummary.seats_used}</span> seats ·{" "}
-                {displaySummary.hold_used} hold units · {displaySummary.wheelchair_used} wheelchair
-              </p>
-              <p className="text-slate-600">
-                {displaySummary.men}m · {displaySummary.women}w · {displaySummary.boys}b ·{" "}
-                {displaySummary.girls}g · {displaySummary.infants} infants
-              </p>
-              <p className="text-slate-500">
-                Unsecured (provisional/deposit pending): {displaySummary.unsecured_count}
+                {displaySummary.men} men · {displaySummary.women} women · {displaySummary.boys} boys ·{" "}
+                {displaySummary.girls} girls · {displaySummary.infants} infants
               </p>
             </>
           )}

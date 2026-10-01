@@ -81,7 +81,7 @@ export function BookParcelForm({
           {departures.map((d) => (
             <option key={d.departure_id} value={d.departure_id}>
               {d.route_name} · {d.direction} ·{" "}
-              {new Date(d.depart_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+              {new Date(d.depart_at).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "short" })}
             </option>
           ))}
         </select>

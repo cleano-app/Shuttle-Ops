@@ -23,7 +23,7 @@ export default async function DepartureReconciliationPage({
           {departure.routeName} · {departure.direction} — Reconciliation
         </h1>
         <p className="text-sm text-slate-500">
-          {new Date(departure.departAt).toLocaleString("en-GB", { dateStyle: "full", timeStyle: "short" })}
+          {new Date(departure.departAt).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" })}
         </p>
       </div>
 
@@ -51,7 +51,7 @@ export default async function DepartureReconciliationPage({
         <h2 className="mb-2 font-medium text-slate-900">Crossing</h2>
         <p className="text-sm text-slate-700">
           Limit {crossing.limit ?? "—"} · Booked {crossing.booked} · Check-in{" "}
-          {crossing.checkinDeadline ? new Date(crossing.checkinDeadline).toLocaleTimeString("en-GB", { timeStyle: "short" }) : "—"} · Ref{" "}
+          {crossing.checkinDeadline ? new Date(crossing.checkinDeadline).toLocaleTimeString("en-GB", { timeZone: "Europe/London", timeStyle: "short" }) : "—"} · Ref{" "}
           {crossing.reference ?? "—"}
         </p>
       </section>

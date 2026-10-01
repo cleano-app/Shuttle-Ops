@@ -104,7 +104,7 @@ export interface ManifestData {
 
 function formatTime(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit" });
 }
 
 export function ManifestDocument({ data }: { data: ManifestData }) {
@@ -116,7 +116,7 @@ export function ManifestDocument({ data }: { data: ManifestData }) {
             {data.routeName} · {data.direction}
           </Text>
           <Text style={styles.subtitle}>
-            {new Date(data.departAt).toLocaleString("en-GB", { dateStyle: "full", timeStyle: "short" })}
+            {new Date(data.departAt).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" })}
           </Text>
           <Text style={styles.subtitle}>Vehicle(s): {data.vehicleRegistrations.join(", ") || "—"}</Text>
           {data.driverSegments.length > 0 && (
@@ -172,7 +172,7 @@ export function ManifestDocument({ data }: { data: ManifestData }) {
         ))}
 
         <Text style={styles.footer}>
-          Fallback manifest — generated {new Date(data.generatedAt).toLocaleString("en-GB")}. This is an estimate,
+          Fallback manifest — generated {new Date(data.generatedAt).toLocaleString("en-GB", { timeZone: "Europe/London" })}. This is an estimate,
           not live traffic information.
         </Text>
       </Page>

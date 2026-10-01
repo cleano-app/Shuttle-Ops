@@ -226,7 +226,7 @@ export default async function VehicleDetailPage({
               key={c.id}
               className={c.result === "critical_defect" ? "font-semibold text-red-700" : c.result === "advisory_defect" ? "text-amber-700" : "text-slate-700"}
             >
-              {new Date(c.completed_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} —{" "}
+              {new Date(c.completed_at).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "short" })} —{" "}
               {c.check_type} — {c.result}
             </li>
           ))}

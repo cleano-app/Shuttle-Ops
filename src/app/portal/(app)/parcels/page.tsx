@@ -21,7 +21,7 @@ export default async function PortalParcelsPage() {
             <p className="font-semibold text-slate-900">{p.reference}</p>
             <p className="text-sm text-slate-600">
               {p.route_name} · {p.direction} ·{" "}
-              {new Date(p.depart_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+              {new Date(p.depart_at).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "short" })}
             </p>
             <p className="text-sm text-slate-500">
               {p.recipient_name} · {p.size_category} · {p.status}

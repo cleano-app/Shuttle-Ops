@@ -73,7 +73,7 @@ export default async function ParcelsPage({
               return (
                 <option key={d.id} value={d.id}>
                   {routeName} · {d.direction} ·{" "}
-                  {new Date(d.depart_at).toLocaleDateString("en-GB")}
+                  {new Date(d.depart_at).toLocaleDateString("en-GB", { timeZone: "Europe/London" })}
                 </option>
               );
             })}

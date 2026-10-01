@@ -28,7 +28,7 @@ export default async function PortalBookingsPage() {
               {b.route_name} · {b.direction}
             </p>
             <p className="text-sm text-slate-600">
-              {new Date(b.depart_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+              {new Date(b.depart_at).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "short" })}
             </p>
             <p className="text-sm text-slate-500">
               {t("bookings_reference")}: {b.booking_reference} · {t("bookings_status")}: {b.passenger_status}

@@ -13,7 +13,7 @@ export default async function SponsoredBookingsPage() {
       <ul className="space-y-2 text-sm">
         {bookings.map((b) => (
           <li key={b.booking_passenger_id} className="rounded border border-slate-200 bg-white p-3">
-            {b.route_name} · {b.direction} · {new Date(b.depart_at).toLocaleDateString("en-GB")} ·{" "}
+            {b.route_name} · {b.direction} · {new Date(b.depart_at).toLocaleDateString("en-GB", { timeZone: "Europe/London" })} ·{" "}
             {b.category} · {b.currency === "GBP" ? "£" : "€"}
             {b.sponsored}
           </li>

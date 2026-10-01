@@ -2,10 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "shuttle-ops-dev",
+      "name": "shuttle-ops",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["scripts/dev-server.js", "dev", "-p", "3100"],
-      "port": 3100
+      "runtimeArgs": ["scripts/dev-server.js", "dev"],
+      "port": 3100,
+      "autoPort": true
     }
   ]
 }

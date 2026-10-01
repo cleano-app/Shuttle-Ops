@@ -465,18 +465,24 @@ interface TablesRaw {
       id: boolean;
       unsecured_provisional_cap_pct: number;
       provisional_expiry_hours: number;
+      default_deposit_gbp: number;
+      default_deposit_eur: number;
       updated_at: string;
     };
     Insert: {
       id?: boolean;
       unsecured_provisional_cap_pct?: number;
       provisional_expiry_hours?: number;
+      default_deposit_gbp?: number;
+      default_deposit_eur?: number;
       updated_at?: string;
     };
     Update: {
       id?: boolean;
       unsecured_provisional_cap_pct?: number;
       provisional_expiry_hours?: number;
+      default_deposit_gbp?: number;
+      default_deposit_eur?: number;
       updated_at?: string;
     };
   };

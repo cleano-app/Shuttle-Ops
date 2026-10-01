@@ -93,7 +93,9 @@ export async function recordCancellation(input: {
             .from("passengers")
             .update({ no_show_count: passenger.no_show_count + 1 })
             .eq("id", bp.passenger_id);
-        } else {
+        } else if (input.noticeHours != null && input.noticeHours < 48) {
+          // Late = under the 48h band suggestOutcome uses; earlier notice
+          // is an ordinary cancellation and shouldn't count against anyone.
           await supabase
             .from("passengers")
             .update({ late_cancel_count: passenger.late_cancel_count + 1 })
@@ -104,6 +106,7 @@ export async function recordCancellation(input: {
   }
 
   revalidatePath("/office/cancellations");
+  revalidatePath("/office/departures/[id]", "page");
   return { success: true, cancellationId: data.id, suggested: suggestion.code };
 }
 

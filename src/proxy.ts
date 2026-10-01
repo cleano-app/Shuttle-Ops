@@ -51,6 +51,11 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isStaffPublicRoute =
     path === "/login" || path === "/forgot-password" || path === "/reset-password";
+  // The install manifest and icons are fetched before anyone signs in; the
+  // cron route checks its own CRON_SECRET.
+  const isAssetRoute =
+    path === "/manifest.webmanifest" || path.startsWith("/api/cron/") || /^\/icon[\w-]*\.svg$/.test(path);
+  if (isAssetRoute) return response;
   // Passenger/referrer portal (build spec Phase 5, §39) has its own login
   // separate from staff — a portal user is never expected to have a
   // `profiles` row, so it can't share /login's redirect target or

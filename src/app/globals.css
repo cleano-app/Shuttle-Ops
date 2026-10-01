@@ -1,42 +1,85 @@
 @import "tailwindcss";
 
+/* Layout tokens ported from Cleano Ops (same org, same stack): same type
+   (Poppins), radii, card shadow, focus ring and shell. Shuttle Ops has its
+   own colours: deep indigo brand with a warm orange accent (the token
+   names navy/teal are kept from Cleano so shared classes still work). */
+
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1f1a3a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-poppins);
+  /* No mono font is bundled - system monospace is fine for the odd
+     reference number. */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* Placeholder brand palette — Shuttle Ops naming/branding is still open
-     (build spec §41: candidates Shuttra/Vanto/Carrio/Passar/Bridgen/Overo).
-     Deliberately NOT a recolour of Cleano's green — swap these three once
-     a real name/palette is chosen. */
-  --color-brand-light: #6fb3e0;
-  --color-brand: #2d6ca0;
-  --color-brand-dark: #163a54;
+  /* Brand: navy. brand-dark IS navy, so every existing bg-brand-dark /
+     text-brand-dark on a page already reads as the brand. */
+  --color-brand-light: #7a6cd0;
+  --color-brand: #4b3aa8;
+  --color-brand-dark: #2a1f5c;
+
+  /* Cleano's master palette - one definition of every UI colour.
+     Generates bg-navy / text-muted / border-hairline etc. */
+  --color-navy: #2a1f5c;
+  --color-teal: #ec6b1e;
+  --color-amber: #e8a33d;
+  --color-red: #d9463e;
+  --color-page: #f6f5fb;
+  --color-muted: #827c99;
+  --color-border: #d6d2e6;
+  --color-hairline: #eeecf5;
+  --color-press: #f1eff8;
+  --color-amber-text: #8a5a0b;
+  --color-amber-bg: #faeeda;
+  --color-teal-bg: #fdeee3;
+  --color-teal-text: #9a4510;
+  --color-green: #177d5b;
+  --color-green-bg: #e7f4ef;
+  --color-red-bg: #fbeceb;
+  /* Secondary text in the sidebar's grouped links. */
+  --color-subtle: #4c4566;
+  /* Group headings in the phone menu sheet. */
+  --color-faint: #a39fb8;
+
+  /* Two layers: a tight contact shadow for the edge and a wider soft one
+     to lift the card off the near-white page. */
+  --shadow-card: 0 1px 2px rgba(11, 41, 66, 0.06), 0 4px 10px -2px rgba(11, 41, 66, 0.1);
+  --shadow-card-hover: 0 2px 4px rgba(11, 41, 66, 0.08), 0 8px 18px -4px rgba(11, 41, 66, 0.14);
+  /* The phone bottom tab bar's upward shadow. */
+  --shadow-bar: 0 -1px 4px rgba(0, 0, 0, 0.06);
+
+  /* Radii: cards 12px, buttons 10px, small controls 8px, chips pill.
+     Generates rounded-card / rounded-button / rounded-control. */
+  --radius-card: 12px;
+  --radius-button: 10px;
+  --radius-control: 8px;
 }
 
-/* No dark-mode variant, matching Cleano Ops's baseline: every screen uses
-   explicit light backgrounds. */
+/* No dark-mode variant: every screen uses explicit light backgrounds, so
+   letting --foreground flip under a dark OS preference would just make
+   unstyled text in inputs unreadable against them. */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Baseline keyboard-focus ring, brand-coloured, :focus-visible only so it
-   doesn't show for every mouse click. Same convention as Cleano Ops. */
+/* Baseline keyboard-focus ring, :focus-visible only so it doesn't show for
+   every mouse click. Teal, 2px offset - same as Cleano. */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
+summary:focus-visible,
 [tabindex]:focus-visible {
-  outline: 3px solid var(--color-brand);
+  outline: 2px solid var(--color-teal);
   outline-offset: 2px;
 }
 
@@ -53,4 +96,24 @@ textarea:focus-visible,
 }
 .skip-link:focus {
   left: 0;
+}
+
+/* Space reserved under page content for the fixed phone bottom tab bar
+   (64px bar + the home-indicator inset on notched phones). A real utility,
+   so md:pb-8 etc. still override it once the bar is hidden. */
+@utility pb-tabbar {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+/* Respect prefers-reduced-motion globally: shorten every animation and
+   transition to effectively instant rather than removing the state change. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
