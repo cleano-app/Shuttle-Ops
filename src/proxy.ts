@@ -51,10 +51,13 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isStaffPublicRoute =
     path === "/login" || path === "/forgot-password" || path === "/reset-password";
-  // The install manifest and icons are fetched before anyone signs in; the
-  // cron route checks its own CRON_SECRET.
+  // The install page, manifest and icons are open to everyone, signed in
+  // or not; the cron route checks its own CRON_SECRET.
   const isAssetRoute =
-    path === "/manifest.webmanifest" || path.startsWith("/api/cron/") || /^\/icon[\w-]*\.svg$/.test(path);
+    path === "/manifest.webmanifest" ||
+    path === "/install" ||
+    path.startsWith("/api/cron/") ||
+    /^\/(icon[\w-]*|apple-touch-icon)\.(svg|png)$/.test(path);
   if (isAssetRoute) return response;
   // Passenger/referrer portal (build spec Phase 5, §39) has its own login
   // separate from staff — a portal user is never expected to have a

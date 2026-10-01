@@ -13,7 +13,8 @@
     "db:migrate": "tsx scripts/run-migrations.ts",
     "db:seed": "tsx scripts/seed-users.ts",
     "db:seed-demo": "tsx scripts/seed-demo-data.ts",
-    "db:clean-test-data": "tsx scripts/clean-test-data.ts"
+    "db:clean-test-data": "tsx scripts/clean-test-data.ts",
+    "create-admin": "tsx scripts/create-admin.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.6.1",

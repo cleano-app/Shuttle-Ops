@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   openGraph: { title: "Shuttle Ops", description: DESCRIPTION, type: "website" },
   twitter: { card: "summary", title: "Shuttle Ops", description: DESCRIPTION },
-  icons: { icon: "/icon.svg" },
+  icons: { icon: "/icon.svg", apple: "/apple-touch-icon.png" },
   // iOS ignores the web manifest for home-screen installs and reads these
   // instead (same as Cleano).
   appleWebApp: { capable: true, title: "Shuttle Ops", statusBarStyle: "default" },

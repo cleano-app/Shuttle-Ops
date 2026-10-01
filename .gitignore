@@ -4,3 +4,8 @@ node_modules
 *.tsbuildinfo
 npm-debug.log*
 .DS_Store
+.vercel
+.env*
+
+# keep the example file tracked
+!.env.local.example

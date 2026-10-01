@@ -42,6 +42,9 @@ export default function LoginPage() {
           {pending ? "Signing in..." : "Sign in"}
         </button>
       </form>
+      <a href="/install" className="mt-6 block text-center text-sm text-muted underline">
+        Install the app on this device
+      </a>
     </AuthCard>
   );
 }
