@@ -7,7 +7,7 @@ import { ActionForm, type FormResult } from "@/components/forms/ActionForm";
 import { formatUk } from "@/lib/time";
 import { CATEGORY_OPTIONS } from "@/lib/categories";
 import type { PassengerCategory } from "@/types/database";
-import { journeyLabel, journeyTone } from "@/lib/journey";
+import { Journey } from "@/components/Journey";
 
 const input = "mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
 const label = "block text-sm font-medium text-slate-700";
@@ -201,7 +201,7 @@ export default async function PassengerDetailPage({ params }: { params: Promise<
                       >
                         <span>
                           {d ? formatUk(d.depart_at, { date: "medium", time: "short" }) : "—"}
-                          <span className={d ? journeyTone(d.direction).text : ""}> · {d ? journeyLabel(d.routes?.name, d.direction) : ""}</span>
+                          {d && <> · <Journey routeName={d.routes?.name} direction={d.direction} size="sm" /></>}
                         </span>
                         <span className="text-slate-500">{t.status.replace("_", " ")}</span>
                       </Link>

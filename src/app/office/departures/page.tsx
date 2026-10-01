@@ -3,9 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createDeparture } from "@/app/actions/departures";
 import { ActionForm, type FormResult } from "@/components/forms/ActionForm";
 import { formatUk, ukLocalToIso } from "@/lib/time";
-import { journeyLabel, journeyTone } from "@/lib/journey";
+import { journeyLabel } from "@/lib/journey";
 import { JourneyBadge } from "@/components/JourneyBadge";
 import type { DepartureDirection } from "@/types/database";
+import { journeyStartColor } from "@/components/Journey";
 
 const input = "mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
 const label = "block text-sm font-medium text-slate-700";
@@ -164,7 +165,8 @@ export default async function DeparturesPage({
               <li key={d.id}>
                 <Link
                   href={`/office/departures/${d.id}`}
-                  className={`flex flex-wrap items-center justify-between gap-3 p-4 hover:bg-slate-50 ${journeyTone(d.direction).bar}`}
+                  className="flex flex-wrap items-center justify-between gap-3 border-s-4 p-4 hover:bg-slate-50"
+                  style={{ borderInlineStartColor: journeyStartColor(d.routes?.name, d.direction) }}
                 >
                   <div className="min-w-0">
                     <p className="font-medium text-slate-900">

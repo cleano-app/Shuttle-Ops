@@ -1,21 +1,14 @@
-import { journeyLabel, journeyTone, type Direction } from "@/lib/journey";
+import { Journey } from "./Journey";
 
-/** "London → Antwerp" pill in that direction's colour. */
+/** Kept for existing callers: the journey with coloured, flagged pins. */
 export function JourneyBadge({
   routeName,
   direction,
   className = "",
 }: {
   routeName: string | null | undefined;
-  direction: Direction;
+  direction: string;
   className?: string;
 }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-sm font-medium ${journeyTone(direction).badge} ${className}`}
-    >
-      <span aria-hidden className={`h-2 w-2 rounded-full ${journeyTone(direction).dot}`} />
-      {journeyLabel(routeName, direction)}
-    </span>
-  );
+  return <Journey routeName={routeName} direction={direction} size="sm" className={className} />;
 }

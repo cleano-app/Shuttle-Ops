@@ -12,7 +12,8 @@ import { DepartureBookings } from "@/components/office/departure/DepartureBookin
 import { formatUk, isoToUkLocal, ukLocalToIso } from "@/lib/time";
 import { compositionText } from "@/lib/categories";
 import type { DepartureStatus, DisruptionType } from "@/types/database";
-import { journeyLabel, journeyTone } from "@/lib/journey";
+import { journeyLabel } from "@/lib/journey";
+import { Journey } from "@/components/Journey";
 
 const NEXT_STATUS: Partial<Record<DepartureStatus, DepartureStatus>> = {
   draft: "published",
@@ -175,7 +176,7 @@ export default async function DepartureDetailPage({
             ← Departures
           </Link>
           <h1 className="text-2xl font-semibold text-slate-900">
-            <span className={journeyTone(departure.direction).text}>{journeyLabel(routeName, departure.direction)}</span>
+            <Journey routeName={routeName} direction={departure.direction} size="lg" />
           </h1>
           <p className="text-sm text-slate-500">
             {formatUk(departure.depart_at, { date: "full", time: "short" })} ·{" "}
