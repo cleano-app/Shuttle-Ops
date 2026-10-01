@@ -79,42 +79,59 @@ export default async function DeparturesPage({
       <AddFab href="/office/departures/new" label="New departure" />
 
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        {rows.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500">
-            {showPast ? "No past departures." : "No upcoming departures yet. Tap + to create one."}
-          </p>
-        ) : (
-          <ul className="divide-y divide-slate-200">
-            {rows.map((d) => (
-              <li key={d.id}>
-                <Link
-                  href={`/office/departures/${d.id}`}
-                  className="flex flex-wrap items-center justify-between gap-3 border-s-4 p-4 hover:bg-slate-50"
-                  style={{ borderInlineStartColor: journeyStartColor(d.routes?.name, d.direction) }}
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-slate-900">
-                      {formatUk(d.depart_at, { date: "full", time: "short" })}
-                    </p>
-                    <JourneyBadge routeName={d.routes?.name} direction={d.direction} className="mt-1" />
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="text-slate-600">
-                      {used.get(d.id) ?? 0} booked / {d.seats_released} released
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${STATUS_STYLE[d.status] ?? ""}`}
-                    >
-                      {d.status}
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {rows.length === 0 ? (
+        <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+          {showPast ? "No past departures." : "No upcoming departures yet. Tap + to create one."}
+        </p>
+      ) : (
+        // Grouped by UK calendar day (owner, 1 Oct 2026).
+        groupByDay(rows).map(([dayLabel, dayRows]) => (
+          <section key={dayLabel}>
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">{dayLabel}</h2>
+            <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              {dayRows.map((d) => (
+                <li key={d.id}>
+                  <Link
+                    href={`/office/departures/${d.id}`}
+                    className="flex flex-wrap items-center justify-between gap-3 border-s-4 p-4 hover:bg-slate-50"
+                    style={{ borderInlineStartColor: journeyStartColor(d.routes?.name, d.direction) }}
+                  >
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="text-lg font-semibold text-slate-900">{formatUk(d.depart_at, { time: "short" })}</span>
+                      <JourneyBadge routeName={d.routes?.name} direction={d.direction} />
+                    </div>
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="text-slate-600">
+                        {used.get(d.id) ?? 0} booked / {d.seats_released}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${STATUS_STYLE[d.status] ?? ""}`}
+                      >
+                        {d.status}
+                      </span>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
+      )}
     </div>
   );
+}
+
+/** [["Friday 2 October", rows…], …] in list order, by UK calendar day. */
+function groupByDay(rows: DepartureRow[]): [string, DepartureRow[]][] {
+  const groups = new Map<string, DepartureRow[]>();
+  for (const d of rows) {
+    const label = new Date(d.depart_at).toLocaleDateString("en-GB", {
+      timeZone: "Europe/London",
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+    groups.set(label, [...(groups.get(label) ?? []), d]);
+  }
+  return [...groups.entries()];
 }

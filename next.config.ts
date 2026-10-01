@@ -1,11 +1,10 @@
 import type { NextConfig } from "next";
 
 // Domains this app talks to at runtime: this project's own Supabase
-// instance (API + Storage). No external mapping/routing API per the build
-// spec (§2/§10) - addresses use internal pg_trgm fuzzy-match, not Google
-// Places, so unlike Cleano Ops there is no maps.googleapis.com allowance
-// here. Fonts are next/font/google, self-hosted at build time - no runtime
-// request to fonts.googleapis.com/fonts.gstatic.com.
+// instance (API + Storage), and Google Maps for the dashboard's driver map
+// only (owner, 1 Oct 2026) - its script, map tiles and the Roboto font it
+// loads. Addresses and routing still use the shuttle's own data (spec
+// §2/§10); app fonts are bundled in the repo.
 //
 // Placeholder until the real Supabase project exists (see Phase 1 plan
 // open decision #1) - update once NEXT_PUBLIC_SUPABASE_URL is known.
@@ -21,11 +20,12 @@ const SUPABASE_ORIGIN =
 const isDev = process.env.NODE_ENV === "development";
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://maps.googleapis.com`,
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: ${SUPABASE_ORIGIN}`,
-  `connect-src 'self' ${SUPABASE_ORIGIN}${isDev ? " ws://localhost:*" : ""}`,
-  "font-src 'self' data:",
+  `img-src 'self' data: blob: ${SUPABASE_ORIGIN} https://maps.googleapis.com https://maps.gstatic.com https://*.ggpht.com https://*.googleusercontent.com`,
+  `connect-src 'self' ${SUPABASE_ORIGIN} https://maps.googleapis.com${isDev ? " ws://localhost:*" : ""}`,
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'none'",

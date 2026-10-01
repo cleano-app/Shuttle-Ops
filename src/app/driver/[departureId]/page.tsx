@@ -6,6 +6,8 @@ import { AssignmentResponse } from "@/components/driver/AssignmentResponse";
 import { HandoverPanel } from "@/components/driver/HandoverPanel";
 import { formatUk } from "@/lib/time";
 import { JourneyBadge } from "@/components/JourneyBadge";
+import { DriverLocationTracker } from "@/components/driver/DriverLocationTracker";
+import { isoHoursFromNow } from "@/lib/time";
 
 export default async function DriverDeparturePage({
   params,
@@ -35,6 +37,11 @@ export default async function DriverDeparturePage({
       .filter((p) => p.boarded)
       .reduce((n, p) => n + (p.role === "pickup" ? 1 : -1), 0)
   );
+  // Share position from 6 hours before departure until the run is done.
+  const departMs = new Date(assignment.depart_at).getTime();
+  const trackLocation =
+    departMs <= new Date(isoHoursFromNow(6)).getTime() && departMs >= new Date(isoHoursFromNow(-24)).getTime();
+
   const aboardParcels = manifest.stops.reduce(
     (n, s) => n + s.parcels.filter((p) => p.role === "collection" && p.status === "onboard").length,
     0
@@ -59,6 +66,7 @@ export default async function DriverDeparturePage({
             </p>
           </div>
           {assignment.assignment_status === "assigned" && <AssignmentResponse assignmentId={assignment.assignment_id} />}
+          <DriverLocationTracker departureId={departureId} active={trackLocation} />
         </>
       }
       footer={

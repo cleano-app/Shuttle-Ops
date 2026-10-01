@@ -1574,6 +1574,38 @@ interface TablesRaw {
       created_at?: string;
     };
   };
+  driver_locations: {
+    Row: {
+      id: number;
+      driver_id: string;
+      departure_id: string | null;
+      lat: number;
+      lng: number;
+      accuracy_m: number | null;
+      heading: number | null;
+      speed_mps: number | null;
+      recorded_at: string;
+    };
+    Insert: {
+      driver_id: string;
+      departure_id?: string | null;
+      lat: number;
+      lng: number;
+      accuracy_m?: number | null;
+      heading?: number | null;
+      speed_mps?: number | null;
+      recorded_at?: string;
+    };
+    Update: {
+      departure_id?: string | null;
+      lat?: number;
+      lng?: number;
+      accuracy_m?: number | null;
+      heading?: number | null;
+      speed_mps?: number | null;
+      recorded_at?: string;
+    };
+  };
   fleet_tasks: {
     Row: {
       id: string;
