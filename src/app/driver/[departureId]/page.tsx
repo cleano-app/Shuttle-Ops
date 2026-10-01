@@ -5,6 +5,7 @@ import { DriverRouteScreen } from "@/components/driver/DriverRouteScreen";
 import { AssignmentResponse } from "@/components/driver/AssignmentResponse";
 import { HandoverPanel } from "@/components/driver/HandoverPanel";
 import { formatUk } from "@/lib/time";
+import { JourneyBadge } from "@/components/JourneyBadge";
 
 export default async function DriverDeparturePage({
   params,
@@ -50,7 +51,7 @@ export default async function DriverDeparturePage({
         <>
           <div className="mb-3">
             <p className="text-base font-semibold text-slate-900">
-              {assignment.route_name} · {assignment.direction}
+              <JourneyBadge routeName={assignment.route_name} direction={assignment.direction} />
             </p>
             <p className="text-sm text-muted">
               {formatUk(assignment.depart_at, { date: "medium", time: "short" })} · Vehicle{" "}

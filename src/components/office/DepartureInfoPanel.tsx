@@ -1,9 +1,11 @@
 "use client";
 
+import { compositionText } from "@/lib/categories";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getDepartureCapacitySummary } from "@/app/actions/departures";
 import { formatUk } from "@/lib/time";
+import { journeyLabel } from "@/lib/journey";
 
 export interface DepartureOption {
   id: string;
@@ -34,6 +36,7 @@ interface DepartureCapacitySummary {
   boys: number;
   girls: number;
   infants: number;
+  unspecified?: number;
   luggage_units_used?: number;
   parcel_units_used?: number;
   parcel_count?: number;
@@ -52,7 +55,7 @@ export function departureOptionLabel(d: DepartureOption, withSeats = true): stri
   const when = formatUk(d.depart_at, { date: "medium", time: "short" });
   const seats =
     !withSeats || d.seatsLeft == null ? "" : d.seatsLeft === 0 ? " · FULL" : ` · ${d.seatsLeft} seat${d.seatsLeft === 1 ? "" : "s"} left`;
-  return `${when} · ${d.routeName} · ${d.direction}${seats}`;
+  return `${when} · ${journeyLabel(d.routeName, d.direction)}${seats}`;
 }
 
 function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
@@ -198,8 +201,7 @@ export function DepartureInfoPanel({ label, departures, selectedId, onSelect, re
                 </p>
               )}
               <p className="text-slate-600">
-                {displaySummary.men} men · {displaySummary.women} women · {displaySummary.boys} boys ·{" "}
-                {displaySummary.girls} girls · {displaySummary.infants} infants
+                {compositionText(displaySummary)}
               </p>
             </>
           )}

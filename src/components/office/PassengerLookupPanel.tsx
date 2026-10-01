@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { searchPassengers, createPassenger } from "@/app/actions/passengers";
 import type { PassengerCategory } from "@/types/database";
 import { addressLabel, type AddressOption } from "./AddressAutocomplete";
+import { CATEGORY_OPTIONS, categoryLabel } from "@/lib/categories";
 
 export interface PassengerSummary {
   id: string;
@@ -66,23 +67,45 @@ export function PassengerLookupPanel({
     }, 250);
   }
 
-  async function handleCreate(formData: FormData) {
-    const full_name = String(formData.get("full_name") ?? "").trim();
-    const category = String(formData.get("category") ?? "man") as PassengerCategory;
-    const phone = String(formData.get("phone") ?? "").trim() || null;
-    if (!full_name) {
-      setError("Enter the caller's full name.");
-      return;
+  // New caller form, auto-saved (owner, 1 Oct 2026: no Save button). It
+  // saves once a name and phone are in and typing pauses, or as soon as the
+  // operator moves on to another part of the console with at least a name.
+  // The form then turns into the selected caller, so there's one record.
+  const [draft, setDraft] = useState({ full_name: "", phone: "", category: "man" as PassengerCategory });
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savingRef = useRef(false);
+
+  function startCreating() {
+    setDraft({ full_name: query.trim(), phone: "", category: "man" });
+    setCreating(true);
+  }
+
+  function updateDraft(patch: Partial<typeof draft>) {
+    const next = { ...draft, ...patch };
+    setDraft(next);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (next.full_name.trim().length >= 2 && next.phone.replace(/D/g, "").length >= 7) {
+      saveTimer.current = setTimeout(() => void saveDraft(next), 1200);
     }
+  }
+
+  async function saveDraft(d: typeof draft) {
+    if (savingRef.current) return;
+    const full_name = d.full_name.trim();
+    if (full_name.length < 2) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    savingRef.current = true;
     setError(null);
     setSaving(true);
+    const phone = d.phone.trim() || null;
     const { id, error: createError } = await createPassenger({
       full_name,
-      category,
+      category: d.category,
       phone,
       created_via: "phone",
     });
     setSaving(false);
+    savingRef.current = false;
     if (createError || !id) {
       setError(createError ?? "Could not create the passenger.");
       return;
@@ -92,7 +115,7 @@ export function PassengerLookupPanel({
       full_name,
       phone,
       email: null,
-      category,
+      category: d.category,
       preferred_language: null,
       deposit_waiver_standing: false,
       no_show_count: 0,
@@ -114,7 +137,7 @@ export function PassengerLookupPanel({
         <div className="space-y-1 text-sm">
           <p className="text-base font-semibold text-slate-900">{selected.full_name}</p>
           <p className="text-slate-600">{selected.phone ?? "No phone on file"}</p>
-          <p className="capitalize text-slate-600">{selected.category}</p>
+          <p className="text-slate-600">{categoryLabel(selected.category)}</p>
           {selected.preferred_language && (
             <p className="text-slate-600">Language: {selected.preferred_language}</p>
           )}
@@ -176,41 +199,60 @@ export function PassengerLookupPanel({
             </ul>
           )}
           {!creating ? (
-            <button
-              type="button"
-              onClick={() => setCreating(true)}
-              className="text-sm font-medium text-blue-900 underline"
-            >
+            <button type="button" onClick={startCreating} className="text-sm font-medium text-blue-900 underline">
               + New passenger
             </button>
           ) : (
-            <form action={handleCreate} className="space-y-2 rounded border border-slate-200 p-3">
-              <input name="full_name" defaultValue={query} placeholder="Full name" required className={inputClass} />
-              <input name="phone" placeholder="Phone" type="tel" className={inputClass} />
-              <select name="category" aria-label="Category" className={inputClass}>
-                <option value="man">Man</option>
-                <option value="woman">Woman</option>
-                <option value="boy">Boy</option>
-                <option value="girl">Girl</option>
-                <option value="infant">Infant</option>
+            <div
+              className="space-y-2 rounded border border-slate-200 p-3"
+              onBlur={(e) => {
+                // Moving focus out of the whole form (not between its fields).
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) void saveDraft(draft);
+              }}
+            >
+              <input
+                value={draft.full_name}
+                onChange={(e) => updateDraft({ full_name: e.target.value })}
+                placeholder="Full name"
+                aria-label="Full name"
+                className={inputClass}
+              />
+              <input
+                value={draft.phone}
+                onChange={(e) => updateDraft({ phone: e.target.value })}
+                placeholder="Phone"
+                type="tel"
+                aria-label="Phone"
+                className={inputClass}
+              />
+              <select
+                value={draft.category}
+                onChange={(e) => updateDraft({ category: e.target.value as PassengerCategory })}
+                aria-label="Category"
+                className={inputClass}
+              >
+                {CATEGORY_OPTIONS.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
               </select>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded bg-blue-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-                >
-                  {saving ? "Saving..." : "Save"}
-                </button>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">
+                  {saving ? "Saving…" : "Saves automatically once a name and phone are in."}
+                </p>
                 <button
                   type="button"
-                  onClick={() => setCreating(false)}
+                  onClick={() => {
+                    if (saveTimer.current) clearTimeout(saveTimer.current);
+                    setCreating(false);
+                  }}
                   className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
                 >
                   Cancel
                 </button>
               </div>
-            </form>
+            </div>
           )}
         </>
       )}

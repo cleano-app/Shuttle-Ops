@@ -27,24 +27,58 @@ export async function logCall(input: {
   duration?: number | null;
   outcome: CallOutcome;
   notes?: string | null;
-}): Promise<ActionResult> {
+}): Promise<ActionResult & { id?: string }> {
   const session = await getSession();
   if (!session || !isOffice(session.role)) {
     return { error: "Not authorized." };
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("call_logs").insert({
-    from_number: input.fromNumber ?? null,
-    matched_passenger_id: input.matchedPassengerId ?? null,
-    operator_id: session.userId,
-    duration: input.duration ?? null,
-    channel: "phone",
-    outcome: input.outcome,
-    notes: input.notes ?? null,
-  });
+  const { data, error } = await supabase
+    .from("call_logs")
+    .insert({
+      from_number: input.fromNumber ?? null,
+      matched_passenger_id: input.matchedPassengerId ?? null,
+      operator_id: session.userId,
+      duration: input.duration ?? null,
+      channel: "phone",
+      outcome: input.outcome,
+      notes: input.notes ?? null,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
 
+  return { success: true, id: data.id };
+}
+
+/**
+ * One call is one log row: the console creates it on the first outcome and
+ * keeps it up to date as the outcome changes or notes are typed
+ * (auto-save), instead of the operator pressing Log for each change.
+ */
+export async function updateCallLog(
+  id: string,
+  input: {
+    outcome?: CallOutcome;
+    notes?: string | null;
+    matchedPassengerId?: string | null;
+    fromNumber?: string | null;
+  }
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session || !isOffice(session.role)) {
+    return { error: "Not authorized." };
+  }
+  const patch: { outcome?: CallOutcome; notes?: string | null; matched_passenger_id?: string | null; from_number?: string | null } = {};
+  if (input.outcome) patch.outcome = input.outcome;
+  if (input.notes !== undefined) patch.notes = input.notes;
+  if (input.matchedPassengerId !== undefined) patch.matched_passenger_id = input.matchedPassengerId;
+  if (input.fromNumber !== undefined) patch.from_number = input.fromNumber;
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("call_logs").update(patch).eq("id", id);
+  if (error) return { error: error.message };
   return { success: true };
 }
 

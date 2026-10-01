@@ -6,6 +6,7 @@ import { listPayStatementsForDriver } from "@/app/actions/driverPay";
 import { getMyAssignments } from "@/app/actions/driver";
 import { createClient } from "@/lib/supabase/server";
 import type { DriverExpenseType, Currency } from "@/types/database";
+import { journeyLabel } from "@/lib/journey";
 
 const EXPENSE_TYPES: DriverExpenseType[] = ["fuel", "toll", "crossing", "parking", "meal", "other"];
 
@@ -56,7 +57,7 @@ export default async function DriverMePage() {
             <option value="">Not tied to a departure</option>
             {(assignments ?? []).map((a) => (
               <option key={a.departure_id} value={a.departure_id}>
-                {a.route_name} · {a.direction} · {new Date(a.depart_at).toLocaleDateString("en-GB", { timeZone: "Europe/London" })}
+                {journeyLabel(a.route_name, a.direction)} · {new Date(a.depart_at).toLocaleDateString("en-GB", { timeZone: "Europe/London" })}
               </option>
             ))}
           </select>
@@ -87,7 +88,7 @@ export default async function DriverMePage() {
             <option value="">Not tied to a departure</option>
             {(assignments ?? []).map((a) => (
               <option key={a.departure_id} value={a.departure_id}>
-                {a.route_name} · {a.direction} · {new Date(a.depart_at).toLocaleDateString("en-GB", { timeZone: "Europe/London" })}
+                {journeyLabel(a.route_name, a.direction)} · {new Date(a.depart_at).toLocaleDateString("en-GB", { timeZone: "Europe/London" })}
               </option>
             ))}
           </select>

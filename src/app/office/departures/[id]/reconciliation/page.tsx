@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getDepartureReconciliation } from "@/app/actions/reconciliation";
+import { journeyLabel } from "@/lib/journey";
 
 export default async function DepartureReconciliationPage({
   params,
@@ -20,7 +21,7 @@ export default async function DepartureReconciliationPage({
           ← Departure
         </Link>
         <h1 className="text-2xl font-semibold text-slate-900">
-          {departure.routeName} · {departure.direction} — Reconciliation
+          {journeyLabel(departure.routeName, departure.direction)} — Reconciliation
         </h1>
         <p className="text-sm text-slate-500">
           {new Date(departure.departAt).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" })}

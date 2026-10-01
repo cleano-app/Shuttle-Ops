@@ -1,4 +1,5 @@
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
+import { journeyLabel } from "@/lib/journey";
 
 // Build spec §37: "A nightly job generates a printable PDF per departure
 // for the following day: stop sequence, passengers per stop with phone
@@ -113,7 +114,7 @@ export function ManifestDocument({ data }: { data: ManifestData }) {
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.title}>
-            {data.routeName} · {data.direction}
+            {journeyLabel(data.routeName, data.direction)}
           </Text>
           <Text style={styles.subtitle}>
             {new Date(data.departAt).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" })}

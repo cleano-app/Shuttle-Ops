@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth/session";
 import { formatUk, isoHoursFromNow } from "@/lib/time";
+import { journeyLabel, journeyTone } from "@/lib/journey";
 
 type DepartureRow = {
   id: string;
@@ -102,7 +103,7 @@ export default async function OfficeDashboardPage() {
                           {formatUk(d.depart_at, { date: "medium", time: "short" })}
                           <span className="font-normal text-slate-500">
                             {" "}
-                            · {d.routes?.name ?? "Route"} · {d.direction}
+                            · <span className={journeyTone(d.direction).text}>{journeyLabel(d.routes?.name, d.direction)}</span>
                           </span>
                         </p>
                         <span className="text-xs font-medium uppercase tracking-wide text-slate-500">{d.status}</span>

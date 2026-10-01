@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createDeparture } from "@/app/actions/departures";
 import { ActionForm, type FormResult } from "@/components/forms/ActionForm";
 import { formatUk, ukLocalToIso } from "@/lib/time";
+import { journeyLabel, journeyTone } from "@/lib/journey";
+import { JourneyBadge } from "@/components/JourneyBadge";
 import type { DepartureDirection } from "@/types/database";
 
 const input = "mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
@@ -53,7 +55,7 @@ export default async function DeparturesPage({
 
   async function addDeparture(_prev: FormResult | null, formData: FormData): Promise<FormResult> {
     "use server";
-    const routeId = String(formData.get("route_id") ?? "");
+    const [routeId = "", direction = "outbound"] = String(formData.get("journey") ?? "").split("|");
     const departAt = ukLocalToIso(String(formData.get("depart_at") ?? ""));
     const seatsCapacity = Number(formData.get("seats_capacity") ?? 0);
     if (!routeId || !departAt || !seatsCapacity) return { error: "Route, time and seats are required." };
@@ -61,7 +63,7 @@ export default async function DeparturesPage({
     const limit = String(formData.get("crossing_passenger_limit") ?? "").trim();
     const result = await createDeparture({
       route_id: routeId,
-      direction: String(formData.get("direction") ?? "outbound") as DepartureDirection,
+      direction: direction as DepartureDirection,
       depart_at: departAt,
       seats_capacity: seatsCapacity,
       hold_capacity_units: Number(formData.get("hold_capacity_units") ?? 0),
@@ -100,20 +102,15 @@ export default async function DeparturesPage({
         <summary className="cursor-pointer font-semibold text-slate-900">+ New departure</summary>
         <ActionForm action={addDeparture} className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <label className={`${label} col-span-2`}>
-            Route
-            <select name="route_id" required className={input}>
-              {(routes ?? []).map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={label}>
-            Direction
-            <select name="direction" className={input}>
-              <option value="outbound">Outbound</option>
-              <option value="return">Return</option>
+            Journey
+            <select name="journey" required className={input}>
+              {(routes ?? []).flatMap((r) =>
+                (["outbound", "return"] as const).map((dir) => (
+                  <option key={`${r.id}|${dir}`} value={`${r.id}|${dir}`}>
+                    {journeyLabel(r.name, dir)}
+                  </option>
+                ))
+              )}
             </select>
           </label>
           <label className={label}>
@@ -167,15 +164,13 @@ export default async function DeparturesPage({
               <li key={d.id}>
                 <Link
                   href={`/office/departures/${d.id}`}
-                  className="flex flex-wrap items-center justify-between gap-3 p-4 hover:bg-slate-50"
+                  className={`flex flex-wrap items-center justify-between gap-3 p-4 hover:bg-slate-50 ${journeyTone(d.direction).bar}`}
                 >
                   <div className="min-w-0">
                     <p className="font-medium text-slate-900">
                       {formatUk(d.depart_at, { date: "full", time: "short" })}
                     </p>
-                    <p className="text-sm text-slate-500">
-                      {d.routes?.name ?? "Route"} · {d.direction}
-                    </p>
+                    <JourneyBadge routeName={d.routes?.name} direction={d.direction} className="mt-1" />
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <span className="text-slate-600">

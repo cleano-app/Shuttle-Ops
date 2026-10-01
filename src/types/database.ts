@@ -5,7 +5,7 @@
 
 export type StaffRole = "admin" | "office" | "dispatcher" | "driver";
 
-export type PassengerCategory = "man" | "woman" | "boy" | "girl" | "infant";
+export type PassengerCategory = "man" | "woman" | "boy" | "girl" | "infant" | "unspecified";
 
 export type Currency = "GBP" | "EUR";
 
@@ -2336,6 +2336,7 @@ export interface Database {
           luggage_units_used: number;
           parcel_units_used: number;
           parcel_count: number;
+          unspecified: number;
         };
         Relationships: [];
       };

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { computeFare } from "@/lib/tariffs/computeFare";
 import { pickTariff, type TariffRow } from "@/lib/tariffs/pickTariff";
 import { buildAddressSnapshot } from "@/lib/addresses/buildSnapshot";
@@ -13,7 +15,7 @@ import {
 import { defaultOccupiesSeat, emptyTravellerRow, type DepositDefaults, type TravellerRow } from "./types";
 import type { Currency, DepartureDirection, PassengerCategory } from "@/types/database";
 
-const CATEGORIES: PassengerCategory[] = ["man", "woman", "boy", "girl", "infant"];
+import { CATEGORY_OPTIONS } from "@/lib/categories";
 
 export type { TariffRow };
 export { pickTariff };
@@ -97,6 +99,45 @@ export function BookingFormPanel({
     onChange([...travellers, row]);
   }
 
+  // Family / group quick-add (owner, 1 Oct 2026): "me, my wife and four
+  // children" in one step. Rows copy the first passenger's addresses; names
+  // can stay blank and become "<surname> family N" on Reserve.
+  const [familyOpen, setFamilyOpen] = useState(false);
+  const [familyCounts, setFamilyCounts] = useState<Record<PassengerCategory, number>>({
+    man: 0,
+    woman: 0,
+    boy: 0,
+    girl: 0,
+    infant: 0,
+    unspecified: 0,
+  });
+  const familyTotal = Object.values(familyCounts).reduce((a, b) => a + b, 0);
+
+  function addFamily() {
+    const first = travellers[0];
+    const rows: TravellerRow[] = [];
+    for (const { value } of CATEGORY_OPTIONS) {
+      for (let i = 0; i < familyCounts[value]; i++) {
+        const row = emptyTravellerRow(currency);
+        row.category = value;
+        row.occupiesSeat = defaultOccupiesSeat(value);
+        if (first) {
+          row.pickupAddressId = first.pickupAddressId;
+          row.pickupLabel = first.pickupLabel;
+          row.pickupSnapshot = first.pickupSnapshot;
+          row.dropoffAddressId = first.dropoffAddressId;
+          row.dropoffLabel = first.dropoffLabel;
+          row.dropoffSnapshot = first.dropoffSnapshot;
+          row.depositWaived = first.depositWaived || first.standingWaiver;
+        }
+        rows.push(row);
+      }
+    }
+    onChange([...travellers, ...rows]);
+    setFamilyCounts({ man: 0, woman: 0, boy: 0, girl: 0, infant: 0, unspecified: 0 });
+    setFamilyOpen(false);
+  }
+
   function removeRow(key: string) {
     onChange(travellers.filter((row) => row.key !== key));
   }
@@ -170,7 +211,7 @@ export function BookingFormPanel({
                       standingWaiver: false,
                     })
                   }
-                  placeholder="Name"
+                  placeholder="Name (optional for family)"
                   aria-label={`Passenger ${index + 1} name`}
                   className="col-span-2 rounded border border-slate-300 bg-white px-3 py-2 text-sm"
                 />
@@ -181,11 +222,11 @@ export function BookingFormPanel({
                     const category = e.target.value as PassengerCategory;
                     updateRow(row.key, { category, occupiesSeat: defaultOccupiesSeat(category) });
                   }}
-                  className="rounded border border-slate-300 bg-white px-3 py-2 text-sm capitalize"
+                  className="rounded border border-slate-300 bg-white px-3 py-2 text-sm"
                 >
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
+                  {CATEGORY_OPTIONS.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
                     </option>
                   ))}
                 </select>
@@ -345,14 +386,70 @@ export function BookingFormPanel({
         })}
       </div>
 
+      {familyOpen && (
+        <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-2 text-sm font-medium text-slate-800">Add family / group</p>
+          <div className="grid grid-cols-3 gap-2 @md:grid-cols-6">
+            {CATEGORY_OPTIONS.map((c) => (
+              <label key={c.value} className="text-xs text-slate-600">
+                {c.label}
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  inputMode="numeric"
+                  value={familyCounts[c.value]}
+                  onChange={(e) =>
+                    setFamilyCounts({ ...familyCounts, [c.value]: Math.max(0, Math.min(20, Number(e.target.value) || 0)) })
+                  }
+                  className={fieldClass}
+                />
+              </label>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Same pickup and drop-off as passenger 1. Names are optional — blank ones are saved as the caller&apos;s
+            surname + &ldquo;family&rdquo;.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={familyTotal === 0}
+              onClick={addFamily}
+              className="rounded bg-blue-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+            >
+              Add {familyTotal || ""} passenger{familyTotal === 1 ? "" : "s"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFamilyOpen(false)}
+              className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={addRow}
-          className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          + Add passenger
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={addRow}
+            className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            + Add passenger
+          </button>
+          {!familyOpen && (
+            <button
+              type="button"
+              onClick={() => setFamilyOpen(true)}
+              className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              + Add family / group
+            </button>
+          )}
+        </div>
         <p className="text-sm text-slate-600">
           {travellers.length} passenger{travellers.length === 1 ? "" : "s"} ·{" "}
           {depositsDue === 0

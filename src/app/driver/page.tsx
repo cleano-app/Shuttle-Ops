@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { getMyAssignments } from "@/app/actions/driver";
 import { AssignmentResponse } from "@/components/driver/AssignmentResponse";
 import { formatUk, isoHoursFromNow } from "@/lib/time";
+import { JourneyBadge } from "@/components/JourneyBadge";
 
 // Build spec §31: driver sees only their assigned vehicle, departure and
 // segment. With exactly one accepted run, skip straight to the route
@@ -48,7 +49,7 @@ export default async function DriverHomePage() {
                 <li key={a.assignment_id} className="rounded-lg border border-hairline bg-white p-4 shadow-sm">
                   <Link href={`/driver/${a.departure_id}`} className="block">
                     <p className="font-semibold text-slate-900">
-                      {a.route_name} · {a.direction}
+                      <JourneyBadge routeName={a.route_name} direction={a.direction} />
                     </p>
                     <p className="text-sm text-slate-600">{formatUk(a.depart_at, { date: "medium", time: "short" })}</p>
                     <p className="text-sm text-muted">

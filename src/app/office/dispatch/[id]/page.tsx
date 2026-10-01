@@ -24,6 +24,7 @@ import {
 } from "@/app/actions/driverAssignments";
 import { AddStopFields, AssignDriverFields } from "./DispatchFields";
 import type { StopType } from "@/types/database";
+import { journeyLabel, journeyTone } from "@/lib/journey";
 
 const STOP_TYPES: StopType[] = ["pickup", "dropoff", "crossing", "waypoint"];
 const TYPE_LABEL: Record<string, string> = {
@@ -223,7 +224,7 @@ export default async function DispatchBoardPage({ params }: { params: Promise<{ 
           ← Dispatch
         </Link>
         <h1 className="text-2xl font-semibold text-slate-900">
-          {routeInfo?.name ?? "Route"} · {departure.direction}
+          <span className={journeyTone(departure.direction).text}>{journeyLabel(routeInfo?.name, departure.direction)}</span>
         </h1>
         <p className="text-sm text-slate-500">
           {formatUk(departure.depart_at, { date: "full", time: "short" })} · {departure.status}

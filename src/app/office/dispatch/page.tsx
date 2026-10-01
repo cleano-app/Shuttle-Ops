@@ -9,6 +9,8 @@ import {
   listAllRouteTemplates,
   setRouteTemplateActive,
 } from "@/app/actions/routeTemplates";
+import { journeyLabel } from "@/lib/journey";
+import { JourneyBadge } from "@/components/JourneyBadge";
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-amber-bg text-amber-text",
@@ -88,7 +90,7 @@ export default async function DispatchListPage() {
                 <li key={d.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <p className="font-medium text-slate-900">
-                      {routeName} · {d.direction}{" "}
+                      <JourneyBadge routeName={routeName} direction={d.direction} />{" "}
                       <span
                         className={`ml-1 inline-block rounded px-1.5 py-0.5 align-middle text-xs font-medium ${
                           STATUS_STYLES[d.status] ?? "bg-slate-100 text-slate-700"
@@ -140,7 +142,7 @@ export default async function DispatchListPage() {
                 <div className="min-w-0">
                   <p className={`font-medium ${t.active ? "text-slate-900" : "text-slate-400 line-through"}`}>{t.name}</p>
                   <p className="text-sm text-slate-500">
-                    {t.route_name} · {t.direction} · {t.stops.length} stop{t.stops.length === 1 ? "" : "s"}
+                    {journeyLabel(t.route_name, t.direction)} · {t.stops.length} stop{t.stops.length === 1 ? "" : "s"}
                     {!t.active && " · retired"}
                   </p>
                   {t.notes && <p className="text-sm text-slate-600">{t.notes}</p>}

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createParcelBooking, cancelParcel } from "@/app/actions/parcels";
 import type { Currency, ParcelSizeCategory } from "@/types/database";
+import { journeyLabel } from "@/lib/journey";
 
 const SIZE_CATEGORIES: ParcelSizeCategory[] = ["small", "medium", "large", "oversize"];
 
@@ -72,7 +73,7 @@ export default async function ParcelsPage({
               const routeName = (d as unknown as { routes?: { name?: string } }).routes?.name ?? "Route";
               return (
                 <option key={d.id} value={d.id}>
-                  {routeName} · {d.direction} ·{" "}
+                  {journeyLabel(routeName, d.direction)} ·{" "}
                   {new Date(d.depart_at).toLocaleDateString("en-GB", { timeZone: "Europe/London" })}
                 </option>
               );

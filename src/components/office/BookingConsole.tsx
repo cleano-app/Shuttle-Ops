@@ -17,7 +17,7 @@ import { createProvisionalTripBooking } from "@/app/actions/bookings";
 import { sendBookingConfirmation } from "@/app/actions/notifications";
 import { getAddressesByIds } from "@/app/actions/addresses";
 import { addToWaitlist } from "@/app/actions/waitlist";
-import { logCall } from "@/app/actions/callLogs";
+import { logCall, updateCallLog } from "@/app/actions/callLogs";
 import type { BookingPassengerInput, CallOutcome, Currency, DepartureDirection } from "@/types/database";
 
 interface BookingConsoleProps {
@@ -113,6 +113,11 @@ export function BookingConsole({
   const [callLog, setCallLog] = useState<LoggedCall[]>([]);
   const [callBusy, setCallBusy] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
+  // The call_logs row for the call in progress: created on the first
+  // outcome, then updated in place (auto-save) as things change.
+  const [callId, setCallId] = useState<string | null>(null);
+  const [callNotes, setCallNotes] = useState("");
+  const [callRound, setCallRound] = useState(0);
 
   const outbound = initialDepartures.find((d) => d.id === outboundId) ?? null;
   const returnDeparture = initialDepartures.find((d) => d.id === returnId) ?? null;
@@ -183,19 +188,32 @@ export function BookingConsole({
   async function recordCall(outcome: CallOutcome, notes: string | null, auto: boolean) {
     setCallBusy(true);
     setCallError(null);
-    const res = await logCall({
+    const fields = {
       outcome,
       matchedPassengerId: leadPassenger?.id ?? null,
       fromNumber: leadPassenger?.phone ?? null,
-      notes: notes?.trim() || null,
-    });
+      notes: (notes ?? callNotes).trim() || null,
+    };
+    const res: { error?: string; id?: string } = callId
+      ? await updateCallLog(callId, fields)
+      : await logCall(fields);
     setCallBusy(false);
     if (res.error) {
       setCallError(res.error);
       return false;
     }
-    setCallLog((prev) => [...prev, { outcome, at: new Date().toISOString(), auto }]);
+    if (!callId && res.id) setCallId(res.id);
+    setCallLog([{ outcome, at: new Date().toISOString(), auto }]);
     return true;
+  }
+
+  async function saveCallNotes(notes: string) {
+    setCallNotes(notes);
+    if (!callId) return; // saved with the outcome when one is chosen
+    setCallBusy(true);
+    const res = await updateCallLog(callId, { notes: notes.trim() || null });
+    setCallBusy(false);
+    setCallError(res.error ?? null);
   }
 
   function startNewCall() {
@@ -211,6 +229,10 @@ export function BookingConsole({
     setWaitlistError(null);
     setCallLog([]);
     setCallError(null);
+    setCallId(null);
+    setCallNotes("");
+    setCallRound((n) => n + 1);
+    setCallRound((n) => n + 1);
   }
 
   function buildLeg(rows: TravellerRow[], departure: DepartureOption, reversed: boolean): BookingPassengerInput[] {
@@ -280,7 +302,13 @@ export function BookingConsole({
       return setError("The return departure can't be the same as the outbound one.");
     }
     if (travellers.length === 0) return setError("Add at least one passenger.");
-    if (travellers.some((t) => !t.passengerName.trim())) return setError("Every passenger needs a name.");
+    // Family members are often booked before anyone gives their names:
+    // an unnamed row becomes "<caller's surname> family N", editable later
+    // on the passenger's page.
+    const surname = leadPassenger.full_name.trim().split(/\s+/).slice(-1)[0] || "Passenger";
+    const named = travellers.map((t, i) =>
+      t.passengerName.trim() ? t : { ...t, passengerName: `${surname} family ${i + 1}` }
+    );
     for (const dep of [outbound, returnEnabled ? returnDeparture : null]) {
       if (!dep) continue;
       if (tariffErrors[dep.route_id]) return setError(`Fares for ${dep.routeName} didn't load: ${tariffErrors[dep.route_id]}`);
@@ -294,7 +322,7 @@ export function BookingConsole({
       // back into state straight away so a retry after a failed Reserve
       // doesn't create the same passenger twice.
       const resolved: TravellerRow[] = [];
-      for (const row of travellers) {
+      for (const row of named) {
         if (row.passengerId) {
           resolved.push(row);
           continue;
@@ -305,7 +333,7 @@ export function BookingConsole({
           created_via: "phone",
         });
         if (createError || !id) {
-          setTravellers(travellers.map((t) => resolved.find((r) => r.key === t.key) ?? t));
+          setTravellers(named.map((t) => resolved.find((r) => r.key === t.key) ?? t));
           setError(`Couldn't create passenger "${row.passengerName}": ${createError ?? "unknown error"}`);
           return;
         }
@@ -424,12 +452,14 @@ export function BookingConsole({
           defaultsError={defaultsError}
         />
         <CallOutcomePanel
+          key={callRound}
           callerName={leadPassenger?.full_name ?? null}
           logged={callLog}
           suggested={suggestedOutcome}
           busy={callBusy}
           error={callError}
           onLog={(outcome, notes) => void recordCall(outcome, notes, false)}
+          onNotes={(notes) => void saveCallNotes(notes)}
           onNewCall={startNewCall}
         />
       </div>

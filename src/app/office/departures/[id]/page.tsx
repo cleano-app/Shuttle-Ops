@@ -10,7 +10,9 @@ import { reaccommodateDeparture } from "@/app/actions/disruption";
 import { ActionForm, type FormResult } from "@/components/forms/ActionForm";
 import { DepartureBookings } from "@/components/office/departure/DepartureBookings";
 import { formatUk, isoToUkLocal, ukLocalToIso } from "@/lib/time";
+import { compositionText } from "@/lib/categories";
 import type { DepartureStatus, DisruptionType } from "@/types/database";
+import { journeyLabel, journeyTone } from "@/lib/journey";
 
 const NEXT_STATUS: Partial<Record<DepartureStatus, DepartureStatus>> = {
   draft: "published",
@@ -173,7 +175,7 @@ export default async function DepartureDetailPage({
             ← Departures
           </Link>
           <h1 className="text-2xl font-semibold text-slate-900">
-            {routeName} · {departure.direction}
+            <span className={journeyTone(departure.direction).text}>{journeyLabel(routeName, departure.direction)}</span>
           </h1>
           <p className="text-sm text-slate-500">
             {formatUk(departure.depart_at, { date: "full", time: "short" })} ·{" "}
@@ -232,8 +234,7 @@ export default async function DepartureDetailPage({
         </div>
         {summary && (
           <p className="mt-3 text-sm text-slate-600">
-            {summary.men} men · {summary.women} women · {summary.boys} boys · {summary.girls} girls · {summary.infants}{" "}
-            infants
+            {compositionText(summary)}
           </p>
         )}
         {isLive && (
@@ -491,7 +492,7 @@ export default async function DepartureDetailPage({
                   const rn = (d as unknown as { routes?: { name?: string } }).routes?.name ?? "Route";
                   return (
                     <option key={d.id} value={d.id}>
-                      {rn} · {d.direction} · {formatUk(d.depart_at)}
+                      {journeyLabel(rn, d.direction)} · {formatUk(d.depart_at)}
                     </option>
                   );
                 })}

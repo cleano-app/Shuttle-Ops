@@ -5,7 +5,9 @@ import { getSession } from "@/lib/auth/session";
 import { updatePassenger, updateVulnerabilityNotes } from "@/app/actions/passengers";
 import { ActionForm, type FormResult } from "@/components/forms/ActionForm";
 import { formatUk } from "@/lib/time";
+import { CATEGORY_OPTIONS } from "@/lib/categories";
 import type { PassengerCategory } from "@/types/database";
+import { journeyLabel, journeyTone } from "@/lib/journey";
 
 const input = "mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
 const label = "block text-sm font-medium text-slate-700";
@@ -83,9 +85,9 @@ export default async function PassengerDetailPage({ params }: { params: Promise<
             <label className={label}>
               Category
               <select name="category" defaultValue={p.category} className={input}>
-                {["man", "woman", "boy", "girl", "infant"].map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {CATEGORY_OPTIONS.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
                   </option>
                 ))}
               </select>
@@ -199,7 +201,7 @@ export default async function PassengerDetailPage({ params }: { params: Promise<
                       >
                         <span>
                           {d ? formatUk(d.depart_at, { date: "medium", time: "short" }) : "—"}
-                          <span className="text-slate-500"> · {d?.direction}</span>
+                          <span className={d ? journeyTone(d.direction).text : ""}> · {d ? journeyLabel(d.routes?.name, d.direction) : ""}</span>
                         </span>
                         <span className="text-slate-500">{t.status.replace("_", " ")}</span>
                       </Link>
