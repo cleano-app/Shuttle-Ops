@@ -11,6 +11,7 @@ import {
 } from "@/app/actions/routeTemplates";
 import { journeyLabel } from "@/lib/journey";
 import { JourneyBadge } from "@/components/JourneyBadge";
+import { journeyStartColor } from "@/components/Journey";
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-amber-bg text-amber-text",
@@ -75,50 +76,59 @@ export default async function DispatchListPage() {
         </p>
       </div>
 
-      <section className="rounded-lg border border-slate-200 bg-white">
-        <h2 className="border-b border-slate-200 px-4 py-3 font-medium text-slate-900">Departures</h2>
-        {error && <p className="p-4 text-sm text-red-700">Couldn&apos;t load departures: {error.message}</p>}
-        {!error && (!departures || departures.length === 0) ? (
-          <p className="p-6 text-sm text-slate-500">No upcoming departures.</p>
-        ) : (
-          <ul className="divide-y divide-slate-200">
-            {(departures ?? []).map((d) => {
+      {/* Tappable cards grouped by day (owner, 1 Oct 2026: "should be cards
+          and tappable, no need for Open board"). */}
+      {error && <p className="text-sm text-red-700">Couldn&apos;t load departures: {error.message}</p>}
+      {!error && (!departures || departures.length === 0) ? (
+        <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">No upcoming departures.</p>
+      ) : (
+        groupByDay(departures ?? []).map(([dayLabel, dayRows]) => (
+          <section key={dayLabel} className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{dayLabel}</h2>
+            {dayRows.map((d) => {
               const routeName = (d as unknown as { routes?: { name?: string } }).routes?.name ?? "Route";
               const stops = stopCount.get(d.id) ?? 0;
               const drivers = driverCount.get(d.id) ?? 0;
               return (
-                <li key={d.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="font-medium text-slate-900">
-                      <JourneyBadge routeName={routeName} direction={d.direction} />{" "}
-                      <span
-                        className={`ml-1 inline-block rounded px-1.5 py-0.5 align-middle text-xs font-medium ${
-                          STATUS_STYLES[d.status] ?? "bg-slate-100 text-slate-700"
-                        }`}
-                      >
+                <Link
+                  key={d.id}
+                  href={`/office/dispatch/${d.id}`}
+                  className="flex items-center gap-3 rounded-xl border border-s-4 border-slate-200 bg-white p-4 shadow-sm active:bg-slate-50 hover:bg-slate-50"
+                  style={{ borderInlineStartColor: journeyStartColor(routeName, d.direction) }}
+                >
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="text-xl font-semibold text-slate-900">{formatUk(d.depart_at, { time: "short" })}</span>
+                      <JourneyBadge routeName={routeName} direction={d.direction} />
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 text-xs font-medium">
+                      <span className={`rounded-full px-2 py-0.5 ${STATUS_STYLES[d.status] ?? "bg-slate-100 text-slate-700"}`}>
                         {d.status}
                       </span>
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      {formatUk(d.depart_at, { date: "medium", time: "short" })} · {stops} stop{stops === 1 ? "" : "s"} ·{" "}
-                      {drivers} driver{drivers === 1 ? "" : "s"}
-                    </p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 ${stops ? "bg-slate-100 text-slate-700" : "bg-amber-50 text-amber-800 ring-1 ring-amber-200"}`}
+                      >
+                        {stops ? `${stops} stop${stops === 1 ? "" : "s"}` : "No route yet"}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 ${drivers ? "bg-slate-100 text-slate-700" : "bg-amber-50 text-amber-800 ring-1 ring-amber-200"}`}
+                      >
+                        {drivers ? `${drivers} driver${drivers === 1 ? "" : "s"}` : "No driver"}
+                      </span>
+                    </div>
                     {d.status === "draft" && (
                       <p className="text-xs text-amber-text">Draft - drivers won&apos;t see it until it&apos;s published.</p>
                     )}
                   </div>
-                  <Link
-                    href={`/office/dispatch/${d.id}`}
-                    className="self-start rounded border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:self-auto"
-                  >
-                    Open board
-                  </Link>
-                </li>
+                  <span aria-hidden className="text-2xl text-slate-300">
+                    ›
+                  </span>
+                </Link>
               );
             })}
-          </ul>
-        )}
-      </section>
+          </section>
+        ))
+      )}
 
       <section className="rounded-lg border border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-4 py-3">
@@ -187,4 +197,19 @@ export default async function DispatchListPage() {
       </section>
     </div>
   );
+}
+
+/** [["Friday 2 October", rows…], …] by UK calendar day, in list order. */
+function groupByDay<T extends { depart_at: string }>(rows: T[]): [string, T[]][] {
+  const groups = new Map<string, T[]>();
+  for (const d of rows) {
+    const label = new Date(d.depart_at).toLocaleDateString("en-GB", {
+      timeZone: "Europe/London",
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+    groups.set(label, [...(groups.get(label) ?? []), d]);
+  }
+  return [...groups.entries()];
 }
