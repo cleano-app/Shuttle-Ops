@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth/session";
 import { formatUk, isoHoursFromNow } from "@/lib/time";
+import { AddFab } from "@/components/shell/AddFab";
 import { Journey } from "@/components/Journey";
 
 type DepartureRow = {
@@ -69,10 +70,10 @@ export default async function OfficeDashboardPage() {
             (owner, 1 Oct 2026). */}
         <div className="flex gap-2">
           <Link
-            href="/office/departures"
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            href="/office/departures/new"
+            className="hidden rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 md:inline-block"
           >
-            New departure
+            + New departure
           </Link>
         </div>
       </div>
@@ -148,6 +149,7 @@ export default async function OfficeDashboardPage() {
           )}
         </section>
       </div>
+      <AddFab href="/office/departures/new" label="New departure" />
     </div>
   );
 }

@@ -1,15 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { createDeparture } from "@/app/actions/departures";
-import { ActionForm, type FormResult } from "@/components/forms/ActionForm";
-import { formatUk, ukLocalToIso } from "@/lib/time";
-import { journeyLabel } from "@/lib/journey";
+import { formatUk } from "@/lib/time";
+import { AddFab } from "@/components/shell/AddFab";
 import { JourneyBadge } from "@/components/JourneyBadge";
-import type { DepartureDirection } from "@/types/database";
 import { journeyStartColor } from "@/components/Journey";
-
-const input = "mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
-const label = "block text-sm font-medium text-slate-700";
 
 const STATUS_STYLE: Record<string, string> = {
   draft: "bg-amber-50 text-amber-800 ring-amber-200",
@@ -47,35 +41,11 @@ export default async function DeparturesPage({
     ? query.lt("depart_at", nowIso).order("depart_at", { ascending: false }).limit(60)
     : query.gte("depart_at", nowIso).order("depart_at", { ascending: true }).limit(60);
 
-  const [{ data: departures }, { data: routes }, { data: summaries }] = await Promise.all([
+  const [{ data: departures }, { data: summaries }] = await Promise.all([
     query,
-    supabase.from("routes").select("id, name").eq("active", true).order("name"),
     supabase.from("departure_capacity_summary").select("departure_id, seats_used"),
   ]);
   const used = new Map((summaries ?? []).map((s) => [s.departure_id, s.seats_used ?? 0]));
-
-  async function addDeparture(_prev: FormResult | null, formData: FormData): Promise<FormResult> {
-    "use server";
-    const [routeId = "", direction = "outbound"] = String(formData.get("journey") ?? "").split("|");
-    const departAt = ukLocalToIso(String(formData.get("depart_at") ?? ""));
-    const seatsCapacity = Number(formData.get("seats_capacity") ?? 0);
-    if (!routeId || !departAt || !seatsCapacity) return { error: "Route, time and seats are required." };
-    const releaseNow = formData.get("release_all") === "on";
-    const limit = String(formData.get("crossing_passenger_limit") ?? "").trim();
-    const result = await createDeparture({
-      route_id: routeId,
-      direction: direction as DepartureDirection,
-      depart_at: departAt,
-      seats_capacity: seatsCapacity,
-      hold_capacity_units: Number(formData.get("hold_capacity_units") ?? 0),
-      wheelchair_capacity: Number(formData.get("wheelchair_capacity") ?? 0),
-      crossing_reference: String(formData.get("crossing_reference") ?? "").trim() || null,
-      crossing_passenger_limit: limit ? Number(limit) : null,
-      crossing_checkin_deadline: ukLocalToIso(String(formData.get("crossing_checkin_deadline") ?? "")),
-      ...(releaseNow ? { seats_released: seatsCapacity } : {}),
-    });
-    return result.error ? result : { success: true, message: "Departure created as a draft." };
-  }
 
   const rows = (departures ?? []) as unknown as DepartureRow[];
 
@@ -83,6 +53,13 @@ export default async function DeparturesPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-2xl font-semibold text-slate-900">Departures</h1>
+        <div className="flex items-center gap-2">
+        <Link
+          href="/office/departures/new"
+          className="hidden rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white md:inline-block"
+        >
+          + New departure
+        </Link>
         <div className="flex rounded-lg border border-slate-300 bg-white p-0.5 text-sm">
           <Link
             href="/office/departures"
@@ -97,67 +74,15 @@ export default async function DeparturesPage({
             Past
           </Link>
         </div>
+        </div>
       </div>
+      <AddFab href="/office/departures/new" label="New departure" />
 
-      <details className="rounded-xl border border-slate-200 bg-white p-4" open={rows.length === 0 && !showPast}>
-        <summary className="cursor-pointer font-semibold text-slate-900">+ New departure</summary>
-        <ActionForm action={addDeparture} className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <label className={`${label} col-span-2`}>
-            Journey
-            <select name="journey" required className={input}>
-              {(routes ?? []).flatMap((r) =>
-                (["outbound", "return"] as const).map((dir) => (
-                  <option key={`${r.id}|${dir}`} value={`${r.id}|${dir}`}>
-                    {journeyLabel(r.name, dir)}
-                  </option>
-                ))
-              )}
-            </select>
-          </label>
-          <label className={label}>
-            Departs (UK time)
-            <input name="depart_at" type="datetime-local" required className={input} />
-          </label>
-          <label className={label}>
-            Seats
-            <input name="seats_capacity" type="number" min={1} required defaultValue={16} className={input} />
-          </label>
-          <label className={label}>
-            Hold units
-            <input name="hold_capacity_units" type="number" min={0} defaultValue={26} className={input} />
-          </label>
-          <label className={label}>
-            Wheelchair spaces
-            <input name="wheelchair_capacity" type="number" min={0} defaultValue={0} className={input} />
-          </label>
-          <label className={label}>
-            Crossing limit
-            <input name="crossing_passenger_limit" type="number" min={0} className={input} />
-          </label>
-          <label className={`${label} col-span-2`}>
-            Crossing reference
-            <input name="crossing_reference" className={input} />
-          </label>
-          <label className={`${label} col-span-2`}>
-            Crossing check-in deadline
-            <input name="crossing_checkin_deadline" type="datetime-local" className={input} />
-          </label>
-          <label className="col-span-2 flex items-center gap-2 text-sm text-slate-700">
-            <input name="release_all" type="checkbox" defaultChecked className="h-4 w-4" />
-            Release all seats for booking now
-          </label>
-          <div className="col-span-2 flex items-end justify-end">
-            <button type="submit" className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white">
-              Create departure
-            </button>
-          </div>
-        </ActionForm>
-      </details>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         {rows.length === 0 ? (
           <p className="p-6 text-sm text-slate-500">
-            {showPast ? "No past departures." : "No upcoming departures. Create one above."}
+            {showPast ? "No past departures." : "No upcoming departures yet. Tap + to create one."}
           </p>
         ) : (
           <ul className="divide-y divide-slate-200">

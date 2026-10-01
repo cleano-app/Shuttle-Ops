@@ -1,5 +1,5 @@
 // Realistic test data for trying the app end to end (owner, 1 Oct 2026):
-// three routes with tariffs, two weeks of departures in both directions,
+// London ⇄ Antwerp only for now (owner: "leave Manchester"), with tariffs, two weeks of departures in both directions,
 // areas and addresses on both sides, a dozen passengers / families, and a
 // handful of bookings in different states.
 //
@@ -74,8 +74,8 @@ async function route(code: string, name: string, origin: string, destination: st
         route_id: id,
         direction: null,
         category: null,
-        base_fare_gbp: code === "TEST-LON-MAN" ? 25 : 40,
-        base_fare_eur: code === "TEST-LON-MAN" ? 30 : 45,
+        base_fare_gbp: 40,
+        base_fare_eur: 45,
         luggage_large_allowance: 1,
         luggage_small_allowance: 1,
         luggage_hand_allowance: 1,
@@ -319,6 +319,7 @@ async function clean() {
   }
   if (ids.length) {
     await db.from("waitlist").delete().in("passenger_id", ids);
+    must(await db.from("trips").delete().in("lead_passenger_id", ids), "delete trips");
     await db.from("call_logs").update({ matched_passenger_id: null }).in("matched_passenger_id", ids);
     must(await db.from("passengers").delete().in("id", ids), "delete passengers");
   }
@@ -343,8 +344,6 @@ async function seed() {
     centraal: await area("Antwerp Centraal", "BE", 1),
     berchem: await area("Berchem", "BE", 2),
     wilrijk: await area("Wilrijk", "BE", 3),
-    broughton: await area("Broughton Park", "GB", 1),
-    prestwich: await area("Prestwich", "GB", 2),
   };
   const ad = {
     egerton: await address("41 Egerton Road", "N16 6UE", "London", "GB", A.stamford),
@@ -355,16 +354,13 @@ async function seed() {
     belgielei: await address("Belgiëlei 120", "2018", "Antwerpen", "BE", A.centraal),
     statie: await address("Statiestraat 15", "2600", "Berchem", "BE", A.berchem),
     boomsestwg: await address("Boomsesteenweg 300", "2610", "Wilrijk", "BE", A.wilrijk, { access_notes: "Flat 3, lift at the back" }),
-    bury: await address("Bury Old Road 405", "M7 4QY", "Salford", "GB", A.broughton),
-    leicester: await address("12 Leicester Road", "M7 4AS", "Salford", "GB", A.broughton),
-    prestwichHigh: await address("88 Bury New Road", "M25 0JW", "Prestwich", "GB", A.prestwich),
+    hodford: await address("19 Hodford Road", "NW11 8NL", "London", "GB", A.golders),
+    quinta: await address("Quinten Matsijslei 30", "2018", "Antwerpen", "BE", A.centraal),
   };
 
   console.log("Routes and tariffs...");
   const lonAnt = (await db.from("routes").select("id").eq("code", "LON-ANT").maybeSingle()).data?.id
     ?? (await route("TEST-LON-ANT", "London ⇄ Antwerp", A.stamford, A.centraal));
-  const manAnt = await route("TEST-MAN-ANT", "Manchester ⇄ Antwerp", A.broughton, A.centraal);
-  const lonMan = await route("TEST-LON-MAN", "London ⇄ Manchester", A.stamford, A.broughton);
 
   console.log("Vehicle...");
   const van = await db.from("vehicles").select("id").eq("registration", "TEST-003").maybeSingle();
@@ -391,13 +387,6 @@ async function seed() {
     // London ⇄ Antwerp: out Sun/Tue/Thu 07:00, back Mon/Wed/Fri 14:00.
     if ([0, 2, 4].includes(wd)) made.push({ id: await departure(lonAnt, "outbound", day, "07:00", big), route: "LON-ANT", direction: "outbound", day });
     if ([1, 3, 5].includes(wd)) made.push({ id: await departure(lonAnt, "return", day, "14:00", big), route: "LON-ANT", direction: "return", day });
-    // Manchester ⇄ Antwerp: out Sunday 05:30, back Thursday 13:00.
-    if (wd === 0) made.push({ id: await departure(manAnt, "outbound", day, "05:30", big), route: "MAN-ANT", direction: "outbound", day });
-    if (wd === 4) made.push({ id: await departure(manAnt, "return", day, "13:00", big), route: "MAN-ANT", direction: "return", day });
-    // London ⇄ Manchester (no crossing): out Friday 09:00, back Sunday 17:00.
-    const domestic = { seats: 12, hold: 18, wheelchair: 1, crossing: false };
-    if (wd === 5) made.push({ id: await departure(lonMan, "outbound", day, "09:00", domestic), route: "LON-MAN", direction: "outbound", day });
-    if (wd === 0) made.push({ id: await departure(lonMan, "return", day, "17:00", domestic), route: "LON-MAN", direction: "return", day });
   }
 
   console.log("Passengers and families...");
@@ -428,13 +417,13 @@ async function seed() {
       { full_name: "Chani Pollak", phone: n(105), category: "woman", pickup: ad.belgielei, dropoff: ad.egerton },
       { full_name: "Pollak family 3", phone: n(105), category: "unspecified", pickup: ad.belgielei, dropoff: ad.egerton },
     ],
-    // Manchester travellers.
     green: [
-      { full_name: "Moishe Green", phone: n(106), category: "man", pickup: ad.bury, dropoff: ad.lange },
-      { full_name: "Perel Green", phone: n(106), category: "woman", pickup: ad.bury, dropoff: ad.lange },
+      { full_name: "Moishe Green", phone: n(106), category: "man", pickup: ad.hodford, dropoff: ad.lange },
+      { full_name: "Perel Green", phone: n(106), category: "woman", pickup: ad.hodford, dropoff: ad.lange },
     ],
-    adler: [{ full_name: "Leah Adler", phone: n(107), category: "woman", pickup: ad.leicester, dropoff: ad.egerton }],
-    weinberg: [{ full_name: "Hershy Weinberg", phone: n(108), category: "boy", pickup: ad.prestwichHigh, dropoff: ad.darenth }],
+    // Antwerp residents travelling to London.
+    adler: [{ full_name: "Leah Adler", phone: n(107), category: "woman", pickup: ad.quinta, dropoff: ad.egerton }],
+    weinberg: [{ full_name: "Hershy Weinberg", phone: n(108), category: "boy", pickup: ad.statie, dropoff: ad.darenth }],
   };
   const people: Record<string, { id: string; seed: PersonSeed }[]> = {};
   for (const [family, members] of Object.entries(seeds)) {
@@ -448,8 +437,7 @@ async function seed() {
   const firstOut = next("LON-ANT", "outbound");
   const secondOut = next("LON-ANT", "outbound", 1);
   const firstBack = next("LON-ANT", "return");
-  const manOut = next("MAN-ANT", "outbound");
-  const lonManOut = next("LON-MAN", "outbound");
+  const secondBack = next("LON-ANT", "return", 1);
   if (firstOut) {
     await book(firstOut, people.rosenberg, "waived", 1);
     await book(firstOut, people.katz, "confirmed", 2);
@@ -458,11 +446,14 @@ async function seed() {
   }
   if (secondOut) await book(secondOut, people.levy.map((p) => ({ ...p })), "confirmed", 1).catch(() => {});
   if (firstBack) await book(firstBack, people.pollak, "provisional", 2);
-  if (manOut) await book(manOut, people.green, "confirmed", 2);
-  if (lonManOut) await book(lonManOut, people.adler, "provisional", 1);
+  if (secondOut) await book(secondOut, people.green, "confirmed", 2);
+  if (secondBack) {
+    await book(secondBack, people.adler, "provisional", 1);
+    await book(secondBack, people.weinberg, "waived", 1);
+  }
 
   const total = Object.values(people).flat().length;
-  console.log(`Done: 3 routes, ${made.length} departures, ${total} passengers, bookings on ${[firstOut, firstBack, manOut, lonManOut].filter(Boolean).length + (secondOut ? 1 : 0)} departures.`);
+  console.log(`Done: London ⇄ Antwerp, ${made.length} departures, ${total} passengers, bookings on ${[firstOut, secondOut, firstBack, secondBack].filter(Boolean).length} departures.`);
 }
 
 (process.argv.includes("--clean") ? clean() : seed()).catch((err) => {
