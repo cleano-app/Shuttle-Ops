@@ -47,10 +47,18 @@ interface Address {
 }
 const EMPTY_ADDRESS: Address = { line1: "", postcode: "", city: "" };
 
-export function BookingRequestWizard({ days }: { days: PublicDay[] }) {
-  const [step, setStep] = useState<Step>(1);
-  const [direction, setDirection] = useState<Direction | null>(null);
-  const [outboundId, setOutboundId] = useState<string | null>(null);
+export function BookingRequestWizard({
+  days,
+  initialDepartureId = null,
+}: {
+  days: PublicDay[];
+  /** From the public timetable's "Book" button: journey and day already chosen. */
+  initialDepartureId?: string | null;
+}) {
+  const preset = days.find((d) => d.id === initialDepartureId) ?? null;
+  const [step, setStep] = useState<Step>(preset ? 3 : 1);
+  const [direction, setDirection] = useState<Direction | null>(preset ? preset.direction : null);
+  const [outboundId, setOutboundId] = useState<string | null>(preset ? preset.id : null);
   const [wantsReturn, setWantsReturn] = useState(false);
   const [returnId, setReturnId] = useState<string | null>(null);
   const [party, setParty] = useState<PartyCounts>(EMPTY_PARTY);
@@ -190,6 +198,9 @@ export function BookingRequestWizard({ days }: { days: PublicDay[] }) {
           <section>
             <h1 className={h1Class}>Where are you travelling?</h1>
             <p className={leadClass}>Door to door, by minibus. Tell us what you need and we&apos;ll call you back.</p>
+            <a href="/timetable" className="mt-2 inline-block text-sm font-medium text-brand-dark underline">
+              See the timetable and Jewish calendar
+            </a>
             {days.length === 0 && (
               <p className="mt-4 rounded-card bg-amber-bg px-4 py-3 text-sm text-amber-text">
                 There are no trips open for booking just now. Please call the office and we&apos;ll help.

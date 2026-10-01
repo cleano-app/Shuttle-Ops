@@ -56,6 +56,7 @@ export async function proxy(request: NextRequest) {
   const isAssetRoute =
     path === "/manifest.webmanifest" ||
     path === "/install" ||
+    path === "/timetable" ||
     path === "/book" ||
     path.startsWith("/api/cron/") ||
     /^\/(icon[\w-]*|apple-touch-icon)\.(svg|png)$/.test(path);

@@ -51,6 +51,9 @@ export default function InstallPage() {
       >
         Book a seat online
       </Link>
+      <Link href="/timetable" className="mb-5 block text-center text-sm font-medium text-brand-dark underline">
+        See the timetable and Jewish calendar
+      </Link>
 
       <div className="flex justify-between text-sm">
         <Link href="/login" className="text-muted underline">

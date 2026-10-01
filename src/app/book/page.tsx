@@ -16,7 +16,8 @@ export const metadata: Metadata = {
   description: "Request seats on the London ⇄ Antwerp shuttle. We'll call you to confirm.",
 };
 
-export default async function BookPage() {
+export default async function BookPage({ searchParams }: { searchParams: Promise<{ dep?: string }> }) {
+  const { dep } = await searchParams;
   const { days, failed } = await loadPublicDays();
 
   return (
@@ -36,7 +37,7 @@ export default async function BookPage() {
           </div>
         </div>
       ) : (
-        <BookingRequestWizard days={days} />
+        <BookingRequestWizard days={days} initialDepartureId={dep ?? null} />
       )}
     </main>
   );

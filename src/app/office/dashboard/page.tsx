@@ -207,12 +207,6 @@ export default async function OfficeDashboardPage({
         </div>
       </div>
 
-      {fx && (
-        <div className="xl:max-w-xl">
-          <CurrencyConverter perEur={fx.perEur} date={fx.date} />
-        </div>
-      )}
-
       <div className="grid gap-6 xl:grid-cols-5">
         <section className="space-y-3 xl:col-span-3">
           <h2 className="font-semibold text-slate-900">{isToday ? "Today's departures" : "Departures"}</h2>
@@ -367,6 +361,8 @@ export default async function OfficeDashboardPage({
               />
             </section>
           )}
+          {/* After the departures and the map (owner, 1 Oct 2026). */}
+          {fx && <CurrencyConverter perEur={fx.perEur} date={fx.date} />}
           <section className="rounded-xl border border-slate-200 bg-white">
             <h2 className="border-b border-slate-200 p-4 font-semibold text-slate-900">Needs attention</h2>
             {attention.length === 0 ? (

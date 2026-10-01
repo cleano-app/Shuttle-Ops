@@ -178,14 +178,14 @@ export default async function CalendarPage({
             ›
           </Link>
         </div>
-        <div className="grid grid-cols-7 bg-slate-800 text-center text-xs text-slate-200 md:text-sm">
+        <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] bg-slate-800 text-center text-xs text-slate-200 md:text-sm">
           {WEEKDAYS.map((w) => (
             <div key={w} className={`py-2 ${w === "Sat" ? "font-semibold text-amber-300" : ""}`}>
               {w}
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7 border-s border-slate-200">
+        <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] border-s border-slate-200">
           {grid.weeks.flat().map((day) => (
             <Cell key={day.date} day={day} />
           ))}
