@@ -75,8 +75,8 @@ async function route(code: string, name: string, origin: string, destination: st
         route_id: id,
         direction: null,
         category: null,
-        base_fare_gbp: 40,
-        base_fare_eur: 45,
+        base_fare_gbp: 90,
+        base_fare_eur: 100,
         luggage_large_allowance: 1,
         luggage_small_allowance: 1,
         luggage_hand_allowance: 1,
@@ -244,7 +244,7 @@ async function book(departureId: string, party: { id: string; seed: PersonSeed }
 
   for (const { id, seed } of party) {
     const infant = seed.category === "infant";
-    const fare = infant ? 0 : 40;
+    const fare = infant ? 0 : 90;
     const contribution = infant ? 0 : seed.deposit_waiver_standing ? 0 : 20;
     const large = infant ? 0 : luggageLarge;
     const bp = must(
