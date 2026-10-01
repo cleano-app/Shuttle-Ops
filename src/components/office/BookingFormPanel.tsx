@@ -12,10 +12,20 @@ import {
   type AddressSuggestion,
   type AreaOption,
 } from "./AddressAutocomplete";
-import { defaultOccupiesSeat, emptyTravellerRow, type DepositDefaults, type TravellerRow } from "./types";
+import { defaultOccupiesSeat, type DepositDefaults, type TravellerRow } from "./types";
 import type { Currency, DepartureDirection, PassengerCategory } from "@/types/database";
-
-import { CATEGORY_OPTIONS } from "@/lib/categories";
+import { CATEGORY_OPTIONS, categoryLabel } from "@/lib/categories";
+import { Stepper } from "./booking/Stepper";
+import { Card, Disclosure, StepperRow, inputClass, outlineButtonClass } from "./booking/ui";
+import {
+  adjustLuggage,
+  countByCategory,
+  newPartyRow,
+  removableIndex,
+  setWheelchairCount,
+  sharedValue,
+  type LuggageKind,
+} from "./booking/party";
 
 export type { TariffRow };
 export { pickTariff };
@@ -56,13 +66,24 @@ export function formatMoney(amount: number, currency: Currency): string {
   return `${currency === "GBP" ? "£" : "€"}${amount.toFixed(2)}`;
 }
 
-const fieldClass = "mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm";
+const LUGGAGE: { kind: LuggageKind; label: string }[] = [
+  { kind: "large", label: "Large" },
+  { kind: "small", label: "Small" },
+  { kind: "hand", label: "Hand" },
+  { kind: "oversize", label: "Oversize" },
+];
+
+function passengerTitle(row: TravellerRow, index: number): string {
+  return row.passengerName.trim() || `Passenger ${index + 1} (${categoryLabel(row.category)})`;
+}
 
 /**
- * Build spec §32 "Booking" panel: repeatable passenger rows (category incl.
- * infant, pickup/dropoff address, luggage, mobility, live fare preview via
- * computeFare — the same pure function that will price the actual booking),
- * contribution/sponsored/subsidy split, deposit/waiver.
+ * Build spec §32 "Booking" panel as party-level cards (owner, 1 Oct 2026):
+ * 3 Who's travelling (− n + per category), 4 Pick-up & drop-off (one pair
+ * for everyone, per-passenger overrides tucked away), 5 Luggage, 6 Payment
+ * (contribution/sponsored per passenger, deposit/waiver, totals). Every
+ * party value is written onto each TravellerRow, so pricing (computeFare)
+ * and the booking payload are unchanged.
  */
 export function BookingFormPanel({
   travellers,
@@ -78,142 +99,136 @@ export function BookingFormPanel({
   hasDeparture = false,
 }: BookingFormPanelProps) {
   const depositAmount = depositDefaults?.[currency] ?? null;
+  // Rows given their own pickup/drop-off; party changes leave them alone.
+  const [ownAddress, setOwnAddress] = useState<string[]>([]);
+  const partyRow = travellers.find((r) => !ownAddress.includes(r.key)) ?? travellers[0];
 
   function updateRow(key: string, patch: Partial<TravellerRow>) {
     onChange(travellers.map((row) => (row.key === key ? { ...row, ...patch } : row)));
   }
 
-  function addRow() {
-    // New passengers in the same party usually share the first row's
-    // addresses — copy them so the operator only changes what differs.
-    const first = travellers[0];
-    const row = emptyTravellerRow(currency);
-    if (first) {
-      row.pickupAddressId = first.pickupAddressId;
-      row.pickupLabel = first.pickupLabel;
-      row.pickupSnapshot = first.pickupSnapshot;
-      row.dropoffAddressId = first.dropoffAddressId;
-      row.dropoffLabel = first.dropoffLabel;
-      row.dropoffSnapshot = first.dropoffSnapshot;
-    }
-    onChange([...travellers, row]);
+  function updateAll(patch: Partial<TravellerRow>) {
+    onChange(travellers.map((row) => ({ ...row, ...patch })));
   }
 
-  // Family / group quick-add (owner, 1 Oct 2026): "me, my wife and four
-  // children" in one step. Rows copy the first passenger's addresses; names
-  // can stay blank and become "<surname> family N" on Reserve.
-  const [familyOpen, setFamilyOpen] = useState(false);
-  const [familyCounts, setFamilyCounts] = useState<Record<PassengerCategory, number>>({
-    man: 0,
-    woman: 0,
-    boy: 0,
-    girl: 0,
-    infant: 0,
-    unspecified: 0,
-  });
-  const familyTotal = Object.values(familyCounts).reduce((a, b) => a + b, 0);
+  // --- 3 Who's travelling -------------------------------------------------
+  const counts = countByCategory(travellers);
 
-  function addFamily() {
-    const first = travellers[0];
-    const rows: TravellerRow[] = [];
-    for (const { value } of CATEGORY_OPTIONS) {
-      for (let i = 0; i < familyCounts[value]; i++) {
-        const row = emptyTravellerRow(currency);
-        row.category = value;
-        row.occupiesSeat = defaultOccupiesSeat(value);
-        if (first) {
-          row.pickupAddressId = first.pickupAddressId;
-          row.pickupLabel = first.pickupLabel;
-          row.pickupSnapshot = first.pickupSnapshot;
-          row.dropoffAddressId = first.dropoffAddressId;
-          row.dropoffLabel = first.dropoffLabel;
-          row.dropoffSnapshot = first.dropoffSnapshot;
-          row.depositWaived = first.depositWaived || first.standingWaiver;
-        }
-        rows.push(row);
-      }
+  function setCategoryCount(category: PassengerCategory, next: number) {
+    const current = counts[category];
+    if (next > current) {
+      onChange([...travellers, newPartyRow(category, currency, partyRow)]);
+    } else if (next < current) {
+      const index = removableIndex(travellers, category);
+      if (index >= 0) onChange(travellers.filter((_, i) => i !== index));
     }
-    onChange([...travellers, ...rows]);
-    setFamilyCounts({ man: 0, woman: 0, boy: 0, girl: 0, infant: 0, unspecified: 0 });
-    setFamilyOpen(false);
   }
 
   function removeRow(key: string) {
     onChange(travellers.filter((row) => row.key !== key));
   }
 
+  // --- 4 Pick-up & drop-off -----------------------------------------------
+  function setPartyAddress(which: "pickup" | "dropoff", option: AddressOption) {
+    const patch =
+      which === "pickup"
+        ? { pickupAddressId: option.id, pickupLabel: addressLabel(option), pickupSnapshot: snapshotFor(option) }
+        : { dropoffAddressId: option.id, dropoffLabel: addressLabel(option), dropoffSnapshot: snapshotFor(option) };
+    onChange(travellers.map((row) => (ownAddress.includes(row.key) ? row : { ...row, ...patch })));
+  }
+
+  function setOwnRowAddress(key: string, which: "pickup" | "dropoff", option: AddressOption) {
+    const patch =
+      which === "pickup"
+        ? { pickupAddressId: option.id, pickupLabel: addressLabel(option), pickupSnapshot: snapshotFor(option) }
+        : { dropoffAddressId: option.id, dropoffLabel: addressLabel(option), dropoffSnapshot: snapshotFor(option) };
+    updateRow(key, patch);
+    if (!ownAddress.includes(key)) setOwnAddress([...ownAddress, key]);
+  }
+
+  function backToPartyAddress(key: string) {
+    setOwnAddress(ownAddress.filter((k) => k !== key));
+    const source = travellers.find((r) => r.key !== key && !ownAddress.includes(r.key));
+    if (!source) return;
+    updateRow(key, {
+      pickupAddressId: source.pickupAddressId,
+      pickupLabel: source.pickupLabel,
+      pickupSnapshot: source.pickupSnapshot,
+      dropoffAddressId: source.dropoffAddressId,
+      dropoffLabel: source.dropoffLabel,
+      dropoffSnapshot: source.dropoffSnapshot,
+    });
+  }
+
+  const wheelchairCount = travellers.filter((r) => r.wheelchairSpace).length;
+
+  // --- 6 Payment ----------------------------------------------------------
+  const fares = travellers.map((row) => {
+    const tariff = pickTariff(tariffs, row.category, direction);
+    return tariff
+      ? computeFare({ tariff, currency, luggage: row.luggage, contribution: row.contribution, sponsored: row.sponsored })
+      : null;
+  });
+  const totals = fares.reduce(
+    (t, f) =>
+      f
+        ? {
+            notional: t.notional + f.notionalFare,
+            contribution: t.contribution + f.contribution,
+            sponsored: t.sponsored + f.sponsored,
+            subsidy: t.subsidy + f.subsidy,
+            luggage: t.luggage + f.luggageCharge,
+          }
+        : t,
+    { notional: 0, contribution: 0, sponsored: 0, subsidy: 0, luggage: 0 }
+  );
+  const invalidRows = fares.map((f, i) => (f && !f.isValid ? i : -1)).filter((i) => i >= 0);
+  const noTariff = hasDeparture ? travellers.filter((_, i) => !fares[i]) : [];
   const depositsDue = travellers.filter((t) => !t.depositWaived && !t.standingWaiver).length;
+  const waivable = travellers.filter((t) => !t.standingWaiver);
+  const allWaived = waivable.length > 0 && waivable.every((t) => t.depositWaived);
+  const sharedContribution = sharedValue(travellers, (r) => r.contribution);
+  const sharedSponsored = sharedValue(travellers, (r) => r.sponsored);
+
+  function money(value: string): number {
+    return Math.max(0, Number(value) || 0);
+  }
 
   return (
-    <section className="@container rounded-lg border border-slate-200 bg-white p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-medium text-slate-900">Booking</h2>
-        <div className="flex items-center gap-2 text-sm">
-          <label htmlFor="booking-currency" className="text-slate-600">
-            Currency
-          </label>
-          <select
-            id="booking-currency"
-            value={currency}
-            onChange={(e) => onCurrencyChange(e.target.value as Currency)}
-            className="rounded border border-slate-300 bg-white px-2 py-1"
-          >
-            <option value="GBP">GBP</option>
-            <option value="EUR">EUR</option>
-          </select>
+    <>
+      <Card step={3} title="Who's travelling" action={<span className="text-sm text-slate-500">{travellers.length} in total</span>}>
+        <div className="grid grid-cols-1 gap-x-6 divide-y divide-slate-100 sm:grid-cols-2 sm:divide-y-0">
+          {CATEGORY_OPTIONS.map((c) => (
+            <StepperRow key={c.value} label={c.label} hint={c.value === "infant" ? "On a lap — no seat" : undefined}>
+              <Stepper
+                label={c.label}
+                value={counts[c.value]}
+                max={30}
+                minusDisabled={removableIndex(travellers, c.value) < 0}
+                onChange={(n) => setCategoryCount(c.value, n)}
+              />
+            </StepperRow>
+          ))}
         </div>
-      </div>
 
-      {tariffError && (
-        <p role="alert" className="mb-3 rounded bg-red-50 p-2 text-sm text-red-700">
-          Couldn&apos;t load fares for this route: {tariffError}
-        </p>
-      )}
-
-      <div className="space-y-4">
-        {travellers.map((row, index) => {
-          const rowTariff = pickTariff(tariffs, row.category, direction);
-          const fare = rowTariff
-            ? computeFare({
-                tariff: rowTariff,
-                currency,
-                luggage: row.luggage,
-                contribution: row.contribution,
-                sponsored: row.sponsored,
-              })
-            : null;
-          const waived = row.depositWaived || row.standingWaiver;
-
-          return (
-            <div key={row.key} className="rounded border border-slate-200 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-700">Passenger {index + 1}</p>
-                {travellers.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeRow(row.key)}
-                    className="text-sm text-red-600 underline"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 @lg:grid-cols-4">
+        <Disclosure summary="Add names (optional)">
+          <p className="text-xs text-slate-500">
+            Blank names are saved as the caller&apos;s surname + &ldquo;family&rdquo; and can be changed later.
+          </p>
+          <ul className="space-y-2">
+            {travellers.map((row, index) => (
+              <li key={row.key} className="flex flex-wrap items-center gap-2">
+                <span className="w-5 shrink-0 text-right text-xs text-slate-500">{index + 1}</span>
                 <input
                   value={row.passengerName}
                   onChange={(e) =>
-                    // Renaming a row detaches it from the matched passenger
-                    // record — a new passenger is created at Reserve time.
-                    updateRow(row.key, {
-                      passengerName: e.target.value,
-                      passengerId: null,
-                      standingWaiver: false,
-                    })
+                    // Renaming detaches the row from a matched passenger record;
+                    // a new passenger is created at Reserve time.
+                    updateRow(row.key, { passengerName: e.target.value, passengerId: null, standingWaiver: false })
                   }
-                  placeholder="Name (optional for family)"
+                  placeholder={index === 0 ? "Caller or first passenger" : "Name (optional)"}
                   aria-label={`Passenger ${index + 1} name`}
-                  className="col-span-2 rounded border border-slate-300 bg-white px-3 py-2 text-sm"
+                  className={`${inputClass} min-w-0 flex-1 basis-40`}
                 />
                 <select
                   value={row.category}
@@ -222,7 +237,7 @@ export function BookingFormPanel({
                     const category = e.target.value as PassengerCategory;
                     updateRow(row.key, { category, occupiesSeat: defaultOccupiesSeat(category) });
                   }}
-                  className="rounded border border-slate-300 bg-white px-3 py-2 text-sm"
+                  className={`${inputClass} w-auto`}
                 >
                   {CATEGORY_OPTIONS.map((c) => (
                     <option key={c.value} value={c.value}>
@@ -230,235 +245,326 @@ export function BookingFormPanel({
                     </option>
                   ))}
                 </select>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
+                <label className="flex min-h-11 items-center gap-1.5 text-sm text-slate-700">
                   <input
                     type="checkbox"
                     checked={row.occupiesSeat}
                     onChange={(e) => updateRow(row.key, { occupiesSeat: e.target.checked })}
+                    className="h-4 w-4"
                   />
-                  Occupies seat
+                  Seat
                 </label>
-              </div>
-              {row.passengerId && (
-                <p className="mt-1 text-xs text-slate-500">Linked to an existing passenger record.</p>
-              )}
-
-              <div className="mt-3 grid grid-cols-1 gap-3 @lg:grid-cols-2">
-                <AddressAutocomplete
-                  label="Pickup"
-                  value={row.pickupLabel}
-                  areas={areas}
-                  suggestions={addressSuggestions}
-                  onSelect={(option: AddressOption) =>
-                    updateRow(row.key, {
-                      pickupAddressId: option.id,
-                      pickupLabel: addressLabel(option),
-                      pickupSnapshot: snapshotFor(option),
-                    })
-                  }
-                />
-                <AddressAutocomplete
-                  label="Drop-off"
-                  value={row.dropoffLabel}
-                  areas={areas}
-                  suggestions={addressSuggestions}
-                  onSelect={(option: AddressOption) =>
-                    updateRow(row.key, {
-                      dropoffAddressId: option.id,
-                      dropoffLabel: addressLabel(option),
-                      dropoffSnapshot: snapshotFor(option),
-                    })
-                  }
-                />
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-3 @md:grid-cols-4">
-                {(["large", "small", "hand", "oversize"] as const).map((kind) => (
-                  <label key={kind} className="text-sm capitalize text-slate-700">
-                    {kind}
-                    <input
-                      type="number"
-                      min={0}
-                      inputMode="numeric"
-                      value={row.luggage[kind]}
-                      onChange={(e) =>
-                        updateRow(row.key, {
-                          luggage: { ...row.luggage, [kind]: Math.max(0, Number(e.target.value) || 0) },
-                        })
-                      }
-                      className={fieldClass}
-                    />
-                  </label>
-                ))}
-              </div>
-
-              <div className="mt-3 flex flex-col gap-2 @md:flex-row @md:items-center">
-                <label className="flex shrink-0 items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={row.wheelchairSpace}
-                    onChange={(e) => updateRow(row.key, { wheelchairSpace: e.target.checked })}
-                  />
-                  Wheelchair space
-                </label>
-                <input
-                  value={row.mobilityNeeds}
-                  onChange={(e) => updateRow(row.key, { mobilityNeeds: e.target.value })}
-                  placeholder="Mobility needs (optional)"
-                  aria-label={`Passenger ${index + 1} mobility needs`}
-                  className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <label className="text-sm text-slate-700">
-                  Contribution
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    inputMode="decimal"
-                    value={row.contribution}
-                    onChange={(e) => updateRow(row.key, { contribution: Math.max(0, Number(e.target.value) || 0) })}
-                    className={fieldClass}
-                  />
-                </label>
-                <label className="text-sm text-slate-700">
-                  Sponsored
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    inputMode="decimal"
-                    value={row.sponsored}
-                    onChange={(e) => updateRow(row.key, { sponsored: Math.max(0, Number(e.target.value) || 0) })}
-                    className={fieldClass}
-                  />
-                </label>
-              </div>
-
-              <div
-                className={`mt-3 flex flex-wrap items-center justify-between gap-2 rounded border px-3 py-2 text-sm ${
-                  waived ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"
-                }`}
-              >
-                <p className={waived ? "text-green-800" : "text-amber-900"}>
-                  <span className="font-medium">Deposit:</span>{" "}
-                  {waived
-                    ? row.standingWaiver
-                      ? "waived (standing waiver)"
-                      : "waived"
-                    : depositAmount != null
-                      ? `${formatMoney(depositAmount, currency)} required`
-                      : "required (amount not configured)"}
-                </p>
-                <label className="flex items-center gap-2 text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={waived}
-                    disabled={row.standingWaiver}
-                    onChange={(e) => updateRow(row.key, { depositWaived: e.target.checked })}
-                  />
-                  {row.standingWaiver ? "Standing waiver" : "Waive deposit"}
-                </label>
-              </div>
-
-              {fare ? (
-                <div
-                  className={`mt-3 rounded p-2 text-sm ${
-                    fare.isValid ? "bg-slate-50 text-slate-700" : "bg-red-50 text-red-700"
-                  }`}
-                >
-                  Notional {formatMoney(fare.notionalFare, currency)} = contribution {fare.contribution.toFixed(2)} +
-                  sponsored {fare.sponsored.toFixed(2)} + subsidy {fare.subsidy.toFixed(2)}
-                  {!fare.isValid && " — contribution + sponsored is more than the notional fare."}
-                  {fare.luggageCharge > 0 && ` (includes ${fare.luggageCharge.toFixed(2)} luggage charge)`}
-                </div>
-              ) : (
-                hasDeparture ? (
-                  <p className="mt-3 rounded bg-slate-50 p-2 text-sm text-slate-500">
-                    No tariff for a {row.category} on this route — fare will be recorded as 0.
-                  </p>
-                ) : null
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {familyOpen && (
-        <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
-          <p className="mb-2 text-sm font-medium text-slate-800">Add family / group</p>
-          <div className="grid grid-cols-3 gap-2 @md:grid-cols-6">
-            {CATEGORY_OPTIONS.map((c) => (
-              <label key={c.value} className="text-xs text-slate-600">
-                {c.label}
-                <input
-                  type="number"
-                  min={0}
-                  max={20}
-                  inputMode="numeric"
-                  value={familyCounts[c.value]}
-                  onChange={(e) =>
-                    setFamilyCounts({ ...familyCounts, [c.value]: Math.max(0, Math.min(20, Number(e.target.value) || 0)) })
-                  }
-                  className={fieldClass}
-                />
-              </label>
+                {travellers.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeRow(row.key)}
+                    aria-label={`Remove passenger ${index + 1}`}
+                    className="h-11 w-11 rounded-lg text-xl text-slate-400 hover:bg-red-50 hover:text-red-600"
+                  >
+                    ×
+                  </button>
+                )}
+                {row.passengerId && (
+                  <span className="basis-full pl-7 text-xs text-slate-500">Linked to an existing passenger record.</span>
+                )}
+              </li>
             ))}
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Same pickup and drop-off as passenger 1. Names are optional — blank ones are saved as the caller&apos;s
-            surname + &ldquo;family&rdquo;.
-          </p>
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              disabled={familyTotal === 0}
-              onClick={addFamily}
-              className="rounded bg-blue-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
-            >
-              Add {familyTotal || ""} passenger{familyTotal === 1 ? "" : "s"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setFamilyOpen(false)}
-              className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
+          </ul>
           <button
             type="button"
-            onClick={addRow}
-            className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={() => onChange([...travellers, newPartyRow("man", currency, partyRow)])}
+            className={outlineButtonClass}
           >
             + Add passenger
           </button>
-          {!familyOpen && (
-            <button
-              type="button"
-              onClick={() => setFamilyOpen(true)}
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              + Add family / group
-            </button>
+        </Disclosure>
+      </Card>
+
+      <Card step={4} title="Pick-up & drop-off">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <AddressAutocomplete
+            label={travellers.length > 1 ? "Pickup (everyone)" : "Pickup"}
+            value={partyRow?.pickupLabel ?? ""}
+            areas={areas}
+            suggestions={addressSuggestions}
+            onSelect={(option: AddressOption) => setPartyAddress("pickup", option)}
+          />
+          <AddressAutocomplete
+            label={travellers.length > 1 ? "Drop-off (everyone)" : "Drop-off"}
+            value={partyRow?.dropoffLabel ?? ""}
+            areas={areas}
+            suggestions={addressSuggestions}
+            onSelect={(option: AddressOption) => setPartyAddress("dropoff", option)}
+          />
+        </div>
+
+        <div className="mt-3">
+          <StepperRow label="Wheelchair spaces" hint={wheelchairCount ? undefined : "None needed"}>
+            <Stepper
+              label="wheelchair space"
+              value={wheelchairCount}
+              max={travellers.length}
+              onChange={(n) => onChange(setWheelchairCount(travellers, n))}
+            />
+          </StepperRow>
+        </div>
+
+        <Disclosure summary="Different address or needs for someone">
+          {travellers.map((row, index) => {
+            const own = ownAddress.includes(row.key);
+            return (
+              <div key={row.key} className="space-y-2 rounded-lg bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-slate-800">{passengerTitle(row, index)}</p>
+                  {own && (
+                    <button type="button" onClick={() => backToPartyAddress(row.key)} className={outlineButtonClass}>
+                      Same as everyone
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                  <AddressAutocomplete
+                    label="Pickup"
+                    value={row.pickupLabel}
+                    areas={areas}
+                    suggestions={addressSuggestions}
+                    onSelect={(option: AddressOption) => setOwnRowAddress(row.key, "pickup", option)}
+                  />
+                  <AddressAutocomplete
+                    label="Drop-off"
+                    value={row.dropoffLabel}
+                    areas={areas}
+                    suggestions={addressSuggestions}
+                    onSelect={(option: AddressOption) => setOwnRowAddress(row.key, "dropoff", option)}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <label className="flex min-h-11 shrink-0 items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={row.wheelchairSpace}
+                      onChange={(e) => updateRow(row.key, { wheelchairSpace: e.target.checked })}
+                      className="h-4 w-4"
+                    />
+                    Wheelchair space
+                  </label>
+                  <input
+                    value={row.mobilityNeeds}
+                    onChange={(e) => updateRow(row.key, { mobilityNeeds: e.target.value })}
+                    placeholder="Mobility needs (optional)"
+                    aria-label={`${passengerTitle(row, index)} mobility needs`}
+                    className={`${inputClass} min-w-0 flex-1 basis-48`}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </Disclosure>
+      </Card>
+
+      <Card step={5} title="Luggage" action={<span className="text-sm text-slate-500">whole party</span>}>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-4">
+          {LUGGAGE.map(({ kind, label }) => {
+            const total = travellers.reduce((sum, r) => sum + r.luggage[kind], 0);
+            return (
+              <div key={kind} className="flex flex-col items-start gap-1">
+                <p className="text-sm font-medium text-slate-800">{label}</p>
+                <Stepper
+                  label={`${label.toLowerCase()} bag`}
+                  value={total}
+                  onChange={(n) => onChange(adjustLuggage(travellers, kind, n > total ? 1 : -1))}
+                />
+              </div>
+            );
+          })}
+        </div>
+        {travellers.length > 1 && (
+          <Disclosure summary="Per passenger">
+            <p className="text-xs text-slate-500">The party totals above are shared out evenly; adjust anyone here.</p>
+            {travellers.map((row, index) => (
+              <div key={row.key} className="rounded-lg bg-slate-50 p-3">
+                <p className="mb-2 text-sm font-medium text-slate-800">{passengerTitle(row, index)}</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-4">
+                  {LUGGAGE.map(({ kind, label }) => (
+                    <div key={kind} className="flex flex-col items-start gap-1">
+                      <p className="text-xs text-slate-600">{label}</p>
+                      <Stepper
+                        label={`${label.toLowerCase()} bag for ${passengerTitle(row, index)}`}
+                        value={row.luggage[kind]}
+                        onChange={(n) => updateRow(row.key, { luggage: { ...row.luggage, [kind]: n } })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </Disclosure>
+        )}
+      </Card>
+
+      <Card
+        step={6}
+        title="Payment"
+        action={
+          <select
+            id="booking-currency"
+            value={currency}
+            onChange={(e) => onCurrencyChange(e.target.value as Currency)}
+            aria-label="Currency"
+            className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm"
+          >
+            <option value="GBP">GBP £</option>
+            <option value="EUR">EUR €</option>
+          </select>
+        }
+      >
+        {tariffError && (
+          <p role="alert" className="mb-3 rounded-lg bg-red-50 p-2 text-sm text-red-700">
+            Couldn&apos;t load fares for this route: {tariffError}
+          </p>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-sm font-medium text-slate-700">
+            Contribution <span className="font-normal text-slate-500">each</span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={sharedContribution ?? ""}
+              placeholder={sharedContribution == null ? "Varies" : undefined}
+              onChange={(e) => updateAll({ contribution: money(e.target.value) })}
+              className={`mt-1 ${inputClass}`}
+            />
+          </label>
+          <label className="text-sm font-medium text-slate-700">
+            Sponsored <span className="font-normal text-slate-500">each</span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={sharedSponsored ?? ""}
+              placeholder={sharedSponsored == null ? "Varies" : undefined}
+              onChange={(e) => updateAll({ sponsored: money(e.target.value) })}
+              className={`mt-1 ${inputClass}`}
+            />
+          </label>
+        </div>
+
+        <div
+          className={`mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${
+            depositsDue === 0 ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"
+          }`}
+        >
+          <p className={depositsDue === 0 ? "text-green-800" : "text-amber-900"}>
+            <span className="font-medium">Deposit:</span>{" "}
+            {depositsDue === 0
+              ? travellers.some((t) => t.standingWaiver) && waivable.length === 0
+                ? "waived (standing waiver)"
+                : "waived"
+              : depositAmount != null
+                ? `${formatMoney(depositAmount, currency)} × ${depositsDue} = ${formatMoney(depositAmount * depositsDue, currency)}`
+                : `${depositsDue} required (amount not configured)`}
+          </p>
+          {waivable.length > 0 && (
+            <label className="flex min-h-11 items-center gap-2 text-slate-700">
+              <input
+                type="checkbox"
+                checked={allWaived}
+                onChange={(e) =>
+                  onChange(travellers.map((t) => (t.standingWaiver ? t : { ...t, depositWaived: e.target.checked })))
+                }
+                className="h-4 w-4"
+              />
+              Waive deposit
+            </label>
           )}
         </div>
-        <p className="text-sm text-slate-600">
-          {travellers.length} passenger{travellers.length === 1 ? "" : "s"} ·{" "}
-          {depositsDue === 0
-            ? "no deposits due"
-            : depositAmount != null
-              ? `deposits due ${formatMoney(depositAmount * depositsDue, currency)} (${depositsDue})`
-              : `${depositsDue} deposit${depositsDue === 1 ? "" : "s"} due`}
-        </p>
-      </div>
-    </section>
+
+        {hasDeparture && (
+          <div
+            className={`mt-3 rounded-lg p-2 text-sm ${invalidRows.length ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-700"}`}
+          >
+            <p>
+              <span className="font-medium">Fares {formatMoney(totals.notional, currency)}</span> = contribution{" "}
+              {totals.contribution.toFixed(2)} + sponsored {totals.sponsored.toFixed(2)} + subsidy{" "}
+              {totals.subsidy.toFixed(2)}
+              {totals.luggage > 0 && ` (includes ${totals.luggage.toFixed(2)} luggage charge)`}
+            </p>
+            {invalidRows.length > 0 && (
+              <p className="mt-1">
+                Contribution + sponsored is more than the fare for{" "}
+                {invalidRows.map((i) => passengerTitle(travellers[i], i)).join(", ")}.
+              </p>
+            )}
+            {noTariff.length > 0 && (
+              <p className="mt-1 text-slate-500">
+                No tariff for {[...new Set(noTariff.map((r) => categoryLabel(r.category).toLowerCase()))].join(", ")} on
+                this route — recorded as 0.
+              </p>
+            )}
+          </div>
+        )}
+
+        <Disclosure summary="Per passenger amounts">
+          {travellers.map((row, index) => {
+            const fare = fares[index];
+            const waived = row.depositWaived || row.standingWaiver;
+            return (
+              <div key={row.key} className="space-y-2 rounded-lg bg-slate-50 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-slate-800">{passengerTitle(row, index)}</p>
+                  <label className="flex min-h-9 items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={waived}
+                      disabled={row.standingWaiver}
+                      onChange={(e) => updateRow(row.key, { depositWaived: e.target.checked })}
+                      className="h-4 w-4"
+                    />
+                    {row.standingWaiver ? "Standing waiver" : "Waive deposit"}
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-xs text-slate-600">
+                    Contribution
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      inputMode="decimal"
+                      value={row.contribution}
+                      onChange={(e) => updateRow(row.key, { contribution: money(e.target.value) })}
+                      className={`mt-1 ${inputClass}`}
+                    />
+                  </label>
+                  <label className="text-xs text-slate-600">
+                    Sponsored
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      inputMode="decimal"
+                      value={row.sponsored}
+                      onChange={(e) => updateRow(row.key, { sponsored: money(e.target.value) })}
+                      className={`mt-1 ${inputClass}`}
+                    />
+                  </label>
+                </div>
+                {fare && (
+                  <p className={`text-xs ${fare.isValid ? "text-slate-600" : "text-red-700"}`}>
+                    Notional {formatMoney(fare.notionalFare, currency)} = {fare.contribution.toFixed(2)} +{" "}
+                    {fare.sponsored.toFixed(2)} + subsidy {fare.subsidy.toFixed(2)}
+                    {fare.luggageCharge > 0 && ` (luggage ${fare.luggageCharge.toFixed(2)})`}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </Disclosure>
+      </Card>
+    </>
   );
 }

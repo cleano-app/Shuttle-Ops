@@ -6,6 +6,8 @@ import Link from "next/link";
 import { getDepartureCapacitySummary } from "@/app/actions/departures";
 import { formatUk } from "@/lib/time";
 import { journeyLabel } from "@/lib/journey";
+import { DeparturePicker } from "./booking/DeparturePicker";
+import { inputClass, outlineButtonClass } from "./booking/ui";
 
 export interface DepartureOption {
   id: string;
@@ -49,6 +51,10 @@ interface DepartureInfoPanelProps {
   onSelect: (departure: DepartureOption | null) => void;
   /** Bump to re-fetch the live capacity summary (e.g. after a booking). */
   refreshKey?: number;
+  /** Journey the picker opens on when nothing is selected (journeyKey()). */
+  defaultJourney?: string | null;
+  /** Only offer days on/after this UK day ("YYYY-MM-DD"), e.g. the outbound day for a return. */
+  fromDay?: string | null;
 }
 
 export function departureOptionLabel(d: DepartureOption, withSeats = true): string {
@@ -74,7 +80,15 @@ function Stat({ label, value, warn }: { label: string; value: string; warn?: boo
  * allocate_booking_capacity() remains the sole source of truth for whether
  * a booking is actually allowed.
  */
-export function DepartureInfoPanel({ label, departures, selectedId, onSelect, refreshKey = 0 }: DepartureInfoPanelProps) {
+export function DepartureInfoPanel({
+  label,
+  departures,
+  selectedId,
+  onSelect,
+  refreshKey = 0,
+  defaultJourney = null,
+  fromDay = null,
+}: DepartureInfoPanelProps) {
   const [summary, setSummary] = useState<DepartureCapacitySummary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
@@ -105,50 +119,58 @@ export function DepartureInfoPanel({ label, departures, selectedId, onSelect, re
   const selectedMissing = selectedId && !selected;
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4">
-      <h2 className="mb-3 font-medium text-slate-900">{label}</h2>
-      <select
-        value={selectedId ?? ""}
-        onChange={(e) => {
-          const found = departures.find((d) => d.id === e.target.value) ?? null;
-          onSelect(found);
-        }}
-        aria-label={label}
-        className="mb-3 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm"
-      >
-        <option value="">
-          {departures.length === 0 ? "No published departures coming up" : "Select a departure..."}
-        </option>
-        {departures.map((d) => (
-          // Full departures stay selectable: Office may still waitlist the caller.
-          <option key={d.id} value={d.id}>
-            {departureOptionLabel(d)}
-          </option>
-        ))}
-      </select>
+    <div className="space-y-3">
+      {label && <h3 className="text-sm font-semibold text-slate-700">{label}</h3>}
+      <DeparturePicker
+        label={label || "Departure"}
+        departures={departures}
+        selectedId={selectedId}
+        onSelect={onSelect}
+        defaultJourney={defaultJourney}
+        fromDay={fromDay}
+        renderAll={() => (
+          <select
+            value={selectedId ?? ""}
+            onChange={(e) => {
+              const found = departures.find((d) => d.id === e.target.value) ?? null;
+              onSelect(found);
+            }}
+            aria-label={`${label || "Departure"}: all departures`}
+            className={inputClass}
+          >
+            <option value="">Select a departure...</option>
+            {departures.map((d) => (
+              // Full departures stay selectable: Office may still waitlist the caller.
+              <option key={d.id} value={d.id}>
+                {departureOptionLabel(d)}
+              </option>
+            ))}
+          </select>
+        )}
+      />
 
       {selectedMissing && (
-        <p className="mb-2 rounded bg-amber-50 p-2 text-sm text-amber-900">
+        <p className="rounded-lg bg-amber-50 p-2 text-sm text-amber-900">
           This departure is no longer open for booking. Pick another.
         </p>
       )}
 
       {selected && (
-        <div className="space-y-3 text-sm">
+        <div className="space-y-1.5 rounded-lg bg-slate-50 p-3 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-slate-700">
-              <span className="font-medium">{formatUk(selected.depart_at, { date: "full", time: "short" })}</span>
+            <p className="text-slate-800">
+              <span className="font-semibold">{formatUk(selected.depart_at, { date: "full", time: "short" })}</span>
               <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium capitalize text-green-800">
                 {selected.status}
               </span>
             </p>
-            <Link href={`/office/departures/${selected.id}`} className="text-sm font-medium text-blue-900 underline">
-              Open departure
+            <Link href={`/office/departures/${selected.id}`} className={outlineButtonClass}>
+              Open
             </Link>
           </div>
 
           {summaryError && (
-            <p role="alert" className="rounded bg-red-50 p-2 text-red-700">
+            <p role="alert" className="rounded-lg bg-red-50 p-2 text-red-700">
               Couldn&apos;t load live capacity: {summaryError}
             </p>
           )}
@@ -157,56 +179,60 @@ export function DepartureInfoPanel({ label, departures, selectedId, onSelect, re
 
           {displaySummary && (
             <>
-              <div className="grid grid-cols-2 gap-2">
-                <Stat
-                  label="Seats left"
-                  value={`${seatsLeft} of ${displaySummary.seats_released}`}
-                  warn={seatsLeft !== null && seatsLeft <= 2}
-                />
-                <Stat label="Seats used" value={`${displaySummary.seats_used} (${displaySummary.seats_capacity} fitted)`} />
-                <Stat
-                  label="Hold units"
-                  value={
-                    displaySummary.hold_capacity_units != null
-                      ? `${displaySummary.hold_used} / ${displaySummary.hold_capacity_units}`
-                      : String(displaySummary.hold_used)
-                  }
-                  warn={
-                    displaySummary.hold_capacity_units != null &&
-                    displaySummary.hold_used >= displaySummary.hold_capacity_units
-                  }
-                />
-                <Stat
-                  label="Wheelchair"
-                  value={
-                    displaySummary.wheelchair_capacity != null
-                      ? `${displaySummary.wheelchair_used} / ${displaySummary.wheelchair_capacity}`
-                      : String(displaySummary.wheelchair_used)
-                  }
-                />
-                <Stat
-                  label="Crossing headcount"
-                  value={
-                    displaySummary.crossing_passenger_limit != null
-                      ? `${displaySummary.crossing_headcount} / ${displaySummary.crossing_passenger_limit}`
-                      : String(displaySummary.crossing_headcount)
-                  }
-                />
-                <Stat label="Provisional (unsecured)" value={String(displaySummary.unsecured_count)} />
-              </div>
-              {displaySummary.hold_used > 0 && displaySummary.luggage_units_used !== undefined && (
-                <p className="text-xs text-slate-500">
-                  Hold: luggage {displaySummary.luggage_units_used} · parcels {displaySummary.parcel_units_used ?? 0} (
-                  {displaySummary.parcel_count ?? 0} parcels)
-                </p>
-              )}
-              <p className="text-slate-600">
-                {compositionText(displaySummary)}
+              <p className="text-slate-700">
+                <span className={seatsLeft !== null && seatsLeft <= 2 ? "font-semibold text-amber-800" : "font-semibold"}>
+                  {seatsLeft === 0 ? "Full" : `${seatsLeft} of ${displaySummary.seats_released} seats left`}
+                </span>
+                {displaySummary.hold_capacity_units != null &&
+                  ` · hold ${displaySummary.hold_used}/${displaySummary.hold_capacity_units}`}
+                {displaySummary.wheelchair_capacity != null &&
+                  ` · wheelchair ${displaySummary.wheelchair_used}/${displaySummary.wheelchair_capacity}`}
               </p>
+              <details className="group">
+                <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 text-xs font-medium text-blue-900 [&::-webkit-details-marker]:hidden">
+                  <span aria-hidden className="inline-block transition-transform group-open:rotate-90">
+                    ›
+                  </span>
+                  Capacity detail
+                </summary>
+                <div className="mt-1 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Stat label="Seats used" value={`${displaySummary.seats_used} (${displaySummary.seats_capacity} fitted)`} />
+                    <Stat
+                      label="Hold units"
+                      value={
+                        displaySummary.hold_capacity_units != null
+                          ? `${displaySummary.hold_used} / ${displaySummary.hold_capacity_units}`
+                          : String(displaySummary.hold_used)
+                      }
+                      warn={
+                        displaySummary.hold_capacity_units != null &&
+                        displaySummary.hold_used >= displaySummary.hold_capacity_units
+                      }
+                    />
+                    <Stat
+                      label="Crossing headcount"
+                      value={
+                        displaySummary.crossing_passenger_limit != null
+                          ? `${displaySummary.crossing_headcount} / ${displaySummary.crossing_passenger_limit}`
+                          : String(displaySummary.crossing_headcount)
+                      }
+                    />
+                    <Stat label="Provisional (unsecured)" value={String(displaySummary.unsecured_count)} />
+                  </div>
+                  {displaySummary.hold_used > 0 && displaySummary.luggage_units_used !== undefined && (
+                    <p className="text-xs text-slate-500">
+                      Hold: luggage {displaySummary.luggage_units_used} · parcels {displaySummary.parcel_units_used ?? 0}{" "}
+                      ({displaySummary.parcel_count ?? 0} parcels)
+                    </p>
+                  )}
+                  <p className="text-slate-600">{compositionText(displaySummary)}</p>
+                </div>
+              </details>
             </>
           )}
         </div>
       )}
-    </section>
+    </div>
   );
 }

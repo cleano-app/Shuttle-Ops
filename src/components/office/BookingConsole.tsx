@@ -10,6 +10,8 @@ import { addressLabel, type AddressOption, type AddressSuggestion, type AreaOpti
 import { emptyTravellerRow, type DepositDefaults, type TravellerRow } from "./types";
 import { CallOutcomePanel, outcomeLabel, type LoggedCall } from "./booking/CallOutcomePanel";
 import { capacityMessage, isWaitlistable, parseCapacityCode, type WaitlistableCode } from "./booking/capacityMessages";
+import { journeyKey, oppositeDirection, ukDayKey } from "./booking/departureDays";
+import { Card } from "./booking/ui";
 import { computeFare } from "@/lib/tariffs/computeFare";
 import { listTariffsForRoute } from "@/app/actions/tariffs";
 import { createPassenger } from "@/app/actions/passengers";
@@ -161,7 +163,8 @@ export function BookingConsole({
     };
     setCallerDefaults(defaults);
     setTravellers((rows) =>
-      rows.map((row) => (row.passengerId === passenger.id ? applyDefaults(row, defaults) : row))
+      // The party shares the caller's addresses: fill any row that has none yet.
+      rows.map((row) => applyDefaults(row, defaults))
     );
   }
 
@@ -300,6 +303,9 @@ export function BookingConsole({
     if (returnEnabled && !returnDeparture) return setError("Select a return departure, or turn off the return leg.");
     if (returnEnabled && returnDeparture?.id === outbound.id) {
       return setError("The return departure can't be the same as the outbound one.");
+    }
+    if (returnEnabled && returnDeparture && returnDeparture.depart_at <= outbound.depart_at) {
+      return setError("The return departure is before the outbound one. Pick a later return.");
     }
     if (travellers.length === 0) return setError("Add at least one passenger.");
     // Family members are often booked before anyone gives their names:
@@ -440,144 +446,180 @@ export function BookingConsole({
   const outboundTariffs = outbound ? tariffsByRoute[outbound.route_id] ?? [] : [];
   const suggestedOutcome: CallOutcome | null =
     capacityFailure && capacityFailure.waitlisted.length === 0 ? "no_capacity" : null;
+  const depositsDue = travellers.filter((t) => !t.depositWaived && !t.standingWaiver).length;
+  const depositAmount = depositDefaults?.[currency] ?? null;
+  const symbol = currency === "GBP" ? "£" : "€";
+  const barDeposits =
+    depositsDue === 0
+      ? "no deposits"
+      : depositAmount != null
+        ? `${symbol}${(depositAmount * depositsDue).toFixed(2)} deposits`
+        : `${depositsDue} deposit${depositsDue === 1 ? "" : "s"}`;
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
-      <div className="min-w-0 space-y-4">
-        <PassengerLookupPanel
-          selected={leadPassenger}
-          onSelect={handleSelectLeadPassenger}
-          defaultPickup={callerDefaults.pickup}
-          defaultDropoff={callerDefaults.dropoff}
-          defaultsError={defaultsError}
-        />
-        <CallOutcomePanel
-          key={callRound}
-          callerName={leadPassenger?.full_name ?? null}
-          logged={callLog}
-          suggested={suggestedOutcome}
-          busy={callBusy}
-          error={callError}
-          onLog={(outcome, notes) => void recordCall(outcome, notes, false)}
-          onNotes={(notes) => void saveCallNotes(notes)}
-          onNewCall={startNewCall}
-        />
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
+        <div className="min-w-0 space-y-4">
+          <PassengerLookupPanel
+            selected={leadPassenger}
+            onSelect={handleSelectLeadPassenger}
+            defaultPickup={callerDefaults.pickup}
+            defaultDropoff={callerDefaults.dropoff}
+            defaultsError={defaultsError}
+          />
+
+          <Card step={2} title="Journey & day">
+            <DepartureInfoPanel
+              label={returnEnabled ? "Outbound" : ""}
+              departures={initialDepartures}
+              selectedId={outboundId}
+              refreshKey={refreshKey}
+              onSelect={(d) => {
+                setOutboundId(d?.id ?? null);
+                setCapacityFailure(null);
+              }}
+            />
+
+            <label className="mt-3 flex min-h-12 cursor-pointer items-center justify-between gap-3 border-t border-slate-100 pt-3">
+              <span className="text-sm font-medium text-slate-800">Book a return too</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={returnEnabled}
+                onChange={(e) => setReturnEnabled(e.target.checked)}
+                className="peer sr-only"
+              />
+              <span
+                aria-hidden
+                className="relative h-7 w-12 shrink-0 rounded-full bg-slate-300 transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-6 after:w-6 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:bg-blue-900 peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-400"
+              />
+            </label>
+
+            {returnEnabled && (
+              <div className="mt-3">
+                <DepartureInfoPanel
+                  label="Return"
+                  departures={initialDepartures.filter((d) => d.id !== outboundId)}
+                  selectedId={returnId}
+                  refreshKey={refreshKey}
+                  // Opens on the opposite way to the outbound, from the outbound day on.
+                  defaultJourney={outbound ? journeyKey(outbound.route_id, oppositeDirection(outbound.direction)) : null}
+                  fromDay={outbound ? ukDayKey(outbound.depart_at) : null}
+                  onSelect={(d) => {
+                    setReturnId(d?.id ?? null);
+                    setCapacityFailure(null);
+                  }}
+                />
+              </div>
+            )}
+          </Card>
+        </div>
+
+        <div className="min-w-0 space-y-4">
+          <BookingFormPanel
+            travellers={travellers}
+            onChange={setTravellers}
+            tariffs={outboundTariffs}
+            direction={(outbound?.direction as DepartureDirection) ?? "outbound"}
+            currency={currency}
+            onCurrencyChange={setCurrency}
+            areas={areas}
+            addressSuggestions={addressSuggestions}
+            depositDefaults={depositDefaults}
+            tariffError={outbound ? tariffErrors[outbound.route_id] ?? null : null}
+            hasDeparture={Boolean(outbound)}
+          />
+        </div>
       </div>
 
-      <div className="min-w-0 space-y-4">
-        <DepartureInfoPanel
-          label="Outbound departure"
-          departures={initialDepartures}
-          selectedId={outboundId}
-          refreshKey={refreshKey}
-          onSelect={(d) => {
-            setOutboundId(d?.id ?? null);
-            setCapacityFailure(null);
-          }}
-        />
+      <div className="space-y-3" aria-live="polite">
+        {error && (
+          <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </p>
+        )}
 
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked={returnEnabled} onChange={(e) => setReturnEnabled(e.target.checked)} />
-          Book a return too
-        </label>
+        {capacityFailure && (
+          <div role="alert" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-medium">Can&apos;t book: {capacityFailure.message}</p>
+            <p>Pick another departure, or put the caller on the waitlist and Office will offer a place if one frees up.</p>
+            <div className="flex flex-wrap gap-2">
+              {capacityFailure.legs.map((leg) =>
+                capacityFailure.waitlisted.includes(leg.departureId) ? (
+                  <span key={leg.departureId} className="rounded-lg bg-green-100 px-3 py-2 text-green-800">
+                    On the waitlist ({leg.legName})
+                  </span>
+                ) : (
+                  <button
+                    key={leg.departureId}
+                    type="button"
+                    disabled={waitlistBusy || !leadPassenger}
+                    onClick={() => handleWaitlist(leg.departureId)}
+                    title={leg.label}
+                    className="min-h-11 rounded-lg bg-amber-700 px-4 py-2 font-medium text-white hover:bg-amber-800 disabled:opacity-50"
+                  >
+                    {waitlistBusy
+                      ? "Adding..."
+                      : capacityFailure.legs.length > 1
+                        ? `Add to waitlist (${leg.legName})`
+                        : "Add to waitlist"}
+                  </button>
+                )
+              )}
+            </div>
+            {waitlistError && <p className="rounded-lg bg-red-50 p-2 text-red-700">Waitlist failed: {waitlistError}</p>}
+          </div>
+        )}
 
-        {returnEnabled && (
-          <DepartureInfoPanel
-            label="Return departure"
-            departures={initialDepartures.filter((d) => d.id !== outboundId)}
-            selectedId={returnId}
-            refreshKey={refreshKey}
-            onSelect={(d) => {
-              setReturnId(d?.id ?? null);
-              setCapacityFailure(null);
-            }}
-          />
+        {lastBooking && (
+          <div className="space-y-1 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-900">
+            <p className="text-base font-semibold">
+              Reserved — reference <span className="font-mono">{lastBooking.reference}</span>
+            </p>
+            {lastBooking.legs.map((leg) => (
+              <p key={leg.departureId}>
+                <Link href={`/office/departures/${leg.departureId}`} className="font-medium underline">
+                  {leg.label}
+                </Link>
+              </p>
+            ))}
+            {callLog.length > 0 && (
+              <p className="text-xs text-green-800">Call logged as {outcomeLabel(callLog[0].outcome)}.</p>
+            )}
+            {lastBooking.warning && <p className="rounded-lg bg-amber-50 p-2 text-amber-900">{lastBooking.warning}</p>}
+          </div>
         )}
       </div>
 
-      <div className="min-w-0 space-y-4 md:col-span-2 xl:col-span-1">
-        <BookingFormPanel
-          travellers={travellers}
-          onChange={setTravellers}
-          tariffs={outboundTariffs}
-          direction={(outbound?.direction as DepartureDirection) ?? "outbound"}
-          currency={currency}
-          onCurrencyChange={setCurrency}
-          areas={areas}
-          addressSuggestions={addressSuggestions}
-          depositDefaults={depositDefaults}
-          tariffError={outbound ? tariffErrors[outbound.route_id] ?? null : null}
-          hasDeparture={Boolean(outbound)}
-        />
-
-        <div className="space-y-3" aria-live="polite">
-          {error && (
-            <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-700">
-              {error}
-            </p>
-          )}
-
-          {capacityFailure && (
-            <div role="alert" className="space-y-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-              <p className="font-medium">Can&apos;t book: {capacityFailure.message}</p>
-              <p>Pick another departure, or put the caller on the waitlist and Office will offer a place if one frees up.</p>
-              <div className="flex flex-wrap gap-2">
-                {capacityFailure.legs.map((leg) =>
-                  capacityFailure.waitlisted.includes(leg.departureId) ? (
-                    <span key={leg.departureId} className="rounded bg-green-100 px-3 py-1.5 text-green-800">
-                      On the waitlist ({leg.legName})
-                    </span>
-                  ) : (
-                    <button
-                      key={leg.departureId}
-                      type="button"
-                      disabled={waitlistBusy || !leadPassenger}
-                      onClick={() => handleWaitlist(leg.departureId)}
-                      title={leg.label}
-                      className="rounded bg-amber-700 px-3 py-1.5 font-medium text-white hover:bg-amber-800 disabled:opacity-50"
-                    >
-                      {waitlistBusy
-                        ? "Adding..."
-                        : capacityFailure.legs.length > 1
-                          ? `Add to waitlist (${leg.legName})`
-                          : "Add to waitlist"}
-                    </button>
-                  )
-                )}
-              </div>
-              {waitlistError && <p className="rounded bg-red-50 p-2 text-red-700">Waitlist failed: {waitlistError}</p>}
-            </div>
-          )}
-
-          {lastBooking && (
-            <div className="space-y-1 rounded border border-green-200 bg-green-50 p-3 text-sm text-green-900">
-              <p className="text-base font-semibold">
-                Reserved — reference <span className="font-mono">{lastBooking.reference}</span>
-              </p>
-              {lastBooking.legs.map((leg) => (
-                <p key={leg.departureId}>
-                  <Link href={`/office/departures/${leg.departureId}`} className="font-medium underline">
-                    {leg.label}
-                  </Link>
-                </p>
-              ))}
-              {callLog.length > 0 && (
-                <p className="text-xs text-green-800">Call logged as {outcomeLabel(callLog[0].outcome)}.</p>
-              )}
-              {lastBooking.warning && <p className="rounded bg-amber-50 p-2 text-amber-900">{lastBooking.warning}</p>}
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="w-full rounded bg-blue-900 py-3 text-lg font-semibold text-white hover:bg-blue-950 disabled:opacity-50 sm:w-auto sm:px-8"
-          >
-            {submitting ? "Reserving..." : "Reserve"}
-          </button>
-        </div>
+      {/* Reserve bar: stuck just above the phone tab bar, an ordinary block on md+. */}
+      <div className="sticky bottom-[calc(84px+env(safe-area-inset-bottom))] z-20 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur md:static md:shadow-none">
+        <p className="min-w-0 text-sm text-slate-700">
+          <span className="font-semibold text-slate-900">
+            {travellers.length} passenger{travellers.length === 1 ? "" : "s"}
+          </span>
+          {returnEnabled ? " · return" : ""} · {barDeposits}
+        </p>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="min-h-12 shrink-0 rounded-xl bg-blue-900 px-8 text-lg font-semibold text-white hover:bg-blue-950 disabled:opacity-50"
+        >
+          {submitting ? "Reserving..." : "Reserve"}
+        </button>
       </div>
+
+      <CallOutcomePanel
+        key={callRound}
+        callerName={leadPassenger?.full_name ?? null}
+        logged={callLog}
+        suggested={suggestedOutcome}
+        busy={callBusy}
+        error={callError}
+        onLog={(outcome, notes) => void recordCall(outcome, notes, false)}
+        onNotes={(notes) => void saveCallNotes(notes)}
+        onNewCall={startNewCall}
+      />
     </div>
   );
 }

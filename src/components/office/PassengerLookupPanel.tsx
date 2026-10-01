@@ -5,6 +5,7 @@ import { searchPassengers, createPassenger } from "@/app/actions/passengers";
 import type { PassengerCategory } from "@/types/database";
 import { addressLabel, type AddressOption } from "./AddressAutocomplete";
 import { CATEGORY_OPTIONS, categoryLabel } from "@/lib/categories";
+import { Card, inputClass, outlineButtonClass } from "./booking/ui";
 
 export interface PassengerSummary {
   id: string;
@@ -28,7 +29,6 @@ interface PassengerLookupPanelProps {
   defaultsError?: string | null;
 }
 
-const inputClass = "w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm";
 
 /**
  * Build spec §32 "Caller" panel: passenger search, no-show/late-cancel
@@ -84,7 +84,7 @@ export function PassengerLookupPanel({
     const next = { ...draft, ...patch };
     setDraft(next);
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    if (next.full_name.trim().length >= 2 && next.phone.replace(/D/g, "").length >= 7) {
+    if (next.full_name.trim().length >= 2 && next.phone.replace(/\D/g, "").length >= 7) {
       saveTimer.current = setTimeout(() => void saveDraft(next), 1200);
     }
   }
@@ -130,19 +130,30 @@ export function PassengerLookupPanel({
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4">
-      <h2 className="mb-3 font-medium text-slate-900">Caller</h2>
-
+    <Card
+      step={1}
+      title="Caller"
+      action={
+        selected ? (
+          <button type="button" onClick={() => onSelect(null)} className={outlineButtonClass}>
+            Change
+          </button>
+        ) : !creating ? (
+          <button type="button" onClick={startCreating} className={outlineButtonClass}>
+            + New passenger
+          </button>
+        ) : null
+      }
+    >
       {selected ? (
         <div className="space-y-1 text-sm">
           <p className="text-base font-semibold text-slate-900">{selected.full_name}</p>
-          <p className="text-slate-600">{selected.phone ?? "No phone on file"}</p>
-          <p className="text-slate-600">{categoryLabel(selected.category)}</p>
-          {selected.preferred_language && (
-            <p className="text-slate-600">Language: {selected.preferred_language}</p>
-          )}
+          <p className="text-slate-600">
+            {selected.phone ?? "No phone on file"} · {categoryLabel(selected.category)}
+            {selected.preferred_language && ` · ${selected.preferred_language}`}
+          </p>
           {selected.deposit_waiver_standing && (
-            <p className="rounded bg-amber-50 px-2 py-1 text-amber-800">Standing deposit waiver on file</p>
+            <p className="rounded-lg bg-amber-50 px-2 py-1 text-amber-800">Standing deposit waiver on file</p>
           )}
           <p className={selected.no_show_count > 0 ? "font-medium text-amber-800" : "text-slate-600"}>
             No-shows: {selected.no_show_count} · Late cancels: {selected.late_cancel_count}
@@ -162,9 +173,6 @@ export function PassengerLookupPanel({
             </p>
             {defaultsError && <p className="text-red-700">Couldn&apos;t load default addresses: {defaultsError}</p>}
           </div>
-          <button type="button" onClick={() => onSelect(null)} className="mt-2 text-sm text-slate-500 underline">
-            Change caller
-          </button>
         </div>
       ) : (
         <>
@@ -176,21 +184,21 @@ export function PassengerLookupPanel({
             className={`mb-2 ${inputClass}`}
           />
           {error && (
-            <p role="alert" className="mb-2 rounded bg-red-50 p-2 text-sm text-red-700">
+            <p role="alert" className="mb-2 rounded-lg bg-red-50 p-2 text-sm text-red-700">
               {error}
             </p>
           )}
           {searched && results.length === 0 && !error && (
-            <p className="mb-2 text-sm text-slate-500">No passenger found. Add them as a new passenger.</p>
+            <p className="mb-2 text-sm text-slate-500">No passenger found — tap + New passenger.</p>
           )}
           {results.length > 0 && (
-            <ul className="mb-3 max-h-48 overflow-auto rounded border border-slate-200">
+            <ul className="mb-2 max-h-56 divide-y divide-slate-100 overflow-auto rounded-lg border border-slate-200">
               {results.map((p) => (
                 <li key={p.id}>
                   <button
                     type="button"
                     onClick={() => onSelect(p)}
-                    className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                    className="block min-h-11 w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
                   >
                     {p.full_name} — {p.phone ?? "no phone"}
                   </button>
@@ -198,13 +206,9 @@ export function PassengerLookupPanel({
               ))}
             </ul>
           )}
-          {!creating ? (
-            <button type="button" onClick={startCreating} className="text-sm font-medium text-blue-900 underline">
-              + New passenger
-            </button>
-          ) : (
+          {creating && (
             <div
-              className="space-y-2 rounded border border-slate-200 p-3"
+              className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3"
               onBlur={(e) => {
                 // Moving focus out of the whole form (not between its fields).
                 if (!e.currentTarget.contains(e.relatedTarget as Node | null)) void saveDraft(draft);
@@ -247,7 +251,7 @@ export function PassengerLookupPanel({
                     if (saveTimer.current) clearTimeout(saveTimer.current);
                     setCreating(false);
                   }}
-                  className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
+                  className={outlineButtonClass}
                 >
                   Cancel
                 </button>
@@ -256,6 +260,6 @@ export function PassengerLookupPanel({
           )}
         </>
       )}
-    </section>
+    </Card>
   );
 }

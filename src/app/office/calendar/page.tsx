@@ -103,8 +103,8 @@ export default async function CalendarPage({
     const small = view === "hebrew" ? String(day.gregDay) : day.hebDay;
     return (
       <Link
-        href={href({ m: anchor, d: day.date })}
-        scroll={false}
+        // Tap a day -> Google Calendar style day view (owner, 1 Oct 2026).
+        href={`/office/calendar/day/${day.date}`}
         aria-label={`${day.date} ${day.hebLabel}${list.length ? `, ${list.length} departures` : ""}`}
         className={`relative flex min-h-[86px] flex-col overflow-hidden border-b border-e border-slate-200 p-1 md:min-h-[104px] md:p-1.5 ${bg} ${
           isSel ? "outline outline-2 -outline-offset-2 outline-brand-dark" : ""

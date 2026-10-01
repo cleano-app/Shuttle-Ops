@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { CallOutcome } from "@/types/database";
+import { Card, inputClass, outlineButtonClass } from "./ui";
 
 export const OFFICE_CALL_OUTCOMES: { value: CallOutcome; label: string }[] = [
   { value: "booked", label: "Booked" },
@@ -54,14 +55,15 @@ export function CallOutcomePanel({
   const value = choice || suggested || "";
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="font-medium text-slate-900">Call outcome</h2>
-        <button type="button" onClick={onNewCall} className="text-sm font-medium text-blue-900 underline">
+    <Card
+      title="Call outcome"
+      action={
+        <button type="button" onClick={onNewCall} className={outlineButtonClass}>
           New call
         </button>
-      </div>
-      <p className="mb-2 text-xs text-slate-500">
+      }
+    >
+      <p className="-mt-2 mb-2 text-xs text-slate-500">
         {callerName ? `Caller: ${callerName}` : "No caller selected — logged without a matched passenger."}
       </p>
 
@@ -77,7 +79,7 @@ export function CallOutcomePanel({
         </ul>
       )}
 
-      <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <select
           value={value}
           onChange={(e) => {
@@ -86,7 +88,7 @@ export function CallOutcomePanel({
             if (next) onLog(next, notes);
           }}
           aria-label="Call outcome"
-          className="min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
+          className={`min-w-0 ${inputClass}`}
         >
           <option value="">Choose outcome...</option>
           {OFFICE_CALL_OUTCOMES.map((o) => (
@@ -101,15 +103,15 @@ export function CallOutcomePanel({
           onBlur={() => onNotes(notes)}
           placeholder="Notes (optional) — saved automatically"
           aria-label="Call notes"
-          className="rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
+          className={inputClass}
         />
         {busy && <p className="text-xs text-slate-500">Saving…</p>}
       </div>
       {error && (
-        <p role="alert" className="mt-2 rounded bg-red-50 p-2 text-sm text-red-700">
+        <p role="alert" className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-700">
           Call not logged: {error}
         </p>
       )}
-    </section>
+    </Card>
   );
 }

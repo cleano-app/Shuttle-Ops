@@ -17,6 +17,7 @@ import { config } from "dotenv";
 import { join } from "path";
 import type { Database } from "../src/types/database";
 import { ukLocalToIso } from "../src/lib/time";
+import { dayDetails } from "../src/lib/jewishCalendar";
 
 config({ path: join(__dirname, "..", ".env.local") });
 
@@ -384,6 +385,9 @@ async function seed() {
   const made: { id: string; route: string; direction: string; day: number }[] = [];
   for (let day = 1; day <= 14; day++) {
     const wd = ukWeekday(day);
+    // No runs on Shabbos or Yom Tov.
+    const info = dayDetails(ukDate(day));
+    if (info.isShabbos || info.isYomTov) continue;
     // London ⇄ Antwerp: out Sun/Tue/Thu 07:00, back Mon/Wed/Fri 14:00.
     if ([0, 2, 4].includes(wd)) made.push({ id: await departure(lonAnt, "outbound", day, "07:00", big), route: "LON-ANT", direction: "outbound", day });
     if ([1, 3, 5].includes(wd)) made.push({ id: await departure(lonAnt, "return", day, "14:00", big), route: "LON-ANT", direction: "return", day });

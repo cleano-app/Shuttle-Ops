@@ -5,6 +5,7 @@ import { createDeparture } from "@/app/actions/departures";
 import { ActionForm, type FormResult } from "@/components/forms/ActionForm";
 import { ukLocalToIso } from "@/lib/time";
 import { journeyLabel } from "@/lib/journey";
+import { dayDetails } from "@/lib/jewishCalendar";
 import type { DepartureDirection } from "@/types/database";
 
 const input = "mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
@@ -29,6 +30,12 @@ export default async function NewDeparturePage({
     const departAt = ukLocalToIso(String(formData.get("depart_at") ?? ""));
     const seatsCapacity = Number(formData.get("seats_capacity") ?? 0);
     if (!routeId || !departAt || !seatsCapacity) return { error: "Journey, time and seats are required." };
+    // Guard against booking a run on Shabbos / Yom Tov by mistake.
+    const info = dayDetails(String(formData.get("depart_at")).slice(0, 10));
+    if ((info.isShabbos || info.isYomTov) && formData.get("allow_rest_day") !== "on") {
+      const what = info.isYomTov ? info.events.find((e) => e.kind === "yomtov")?.label ?? "Yom Tov" : "Shabbos";
+      return { error: `That day is ${what}. Tick "Run on this day anyway" to create it.` };
+    }
     const releaseNow = formData.get("release_all") === "on";
     const limit = String(formData.get("crossing_passenger_limit") ?? "").trim();
     const result = await createDeparture({
@@ -104,6 +111,10 @@ export default async function NewDeparturePage({
         <label className="col-span-2 flex items-center gap-2 text-sm text-slate-700 lg:col-span-4">
           <input name="release_all" type="checkbox" defaultChecked className="h-4 w-4" />
           Release all seats for booking now
+        </label>
+        <label className="col-span-2 flex items-center gap-2 text-sm text-slate-500 lg:col-span-4">
+          <input name="allow_rest_day" type="checkbox" className="h-4 w-4" />
+          Run on this day anyway, even if it&apos;s Shabbos or Yom Tov
         </label>
         <div className="col-span-2 flex justify-end lg:col-span-4">
           <button type="submit" className="rounded-lg bg-brand-dark px-5 py-2.5 text-sm font-medium text-white">
