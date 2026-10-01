@@ -42,7 +42,7 @@ export default async function BookingRequestsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">Booking requests</h1>
         <p className="text-sm text-slate-500">
-          Sent from the public <Link href="/book" className="underline">/book</Link> page. Call the customer, then
+          Sent from the public <Link href="/book" className="underline">/book</Link>{" "}page. Call the customer, then
           create the booking — it&apos;s made provisional at the full fare with the deposit required, ready for you to
           adjust and take the deposit as usual.
         </p>

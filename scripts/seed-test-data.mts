@@ -17,9 +17,9 @@ import { config } from "dotenv";
 import { join } from "path";
 import type { Database } from "../src/types/database";
 import { ukLocalToIso } from "../src/lib/time";
-import { dayDetails } from "../src/lib/jewishCalendar";
+import { HebrewCalendar, flags } from "@hebcal/core";
 
-config({ path: join(__dirname, "..", ".env.local") });
+config({ path: join(process.cwd(), ".env.local") });
 
 const db = createClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -105,6 +105,14 @@ async function route(code: string, name: string, origin: string, destination: st
     `infant tariff ${code}`
   );
   return id;
+}
+
+/** Shabbos or Yom Tov (diaspora), for "YYYY-MM-DD". */
+function isRestDay(day: string) {
+  const [y, m, d] = day.split("-").map(Number);
+  const date = new Date(y, m - 1, d, 12);
+  if (date.getDay() === 6) return true;
+  return HebrewCalendar.calendar({ start: date, end: date, il: false }).some((e) => e.getFlags() & flags.CHAG);
 }
 
 /** The UK calendar date `n` days from today, as YYYY-MM-DD. */
@@ -324,6 +332,7 @@ async function clean() {
     await db.from("call_logs").update({ matched_passenger_id: null }).in("matched_passenger_id", ids);
     must(await db.from("passengers").delete().in("id", ids), "delete passengers");
   }
+  await db.from("booking_requests").delete().like("contact_phone", `${PHONE_PREFIX}%`);
   const { data: routes } = await db.from("routes").select("id").like("code", "TEST-%");
   const routeIds = (routes ?? []).map((r) => r.id);
   if (routeIds.length) {
@@ -386,8 +395,7 @@ async function seed() {
   for (let day = 1; day <= 14; day++) {
     const wd = ukWeekday(day);
     // No runs on Shabbos or Yom Tov.
-    const info = dayDetails(ukDate(day));
-    if (info.isShabbos || info.isYomTov) continue;
+    if (isRestDay(ukDate(day))) continue;
     // London ⇄ Antwerp: out Sun/Tue/Thu 07:00, back Mon/Wed/Fri 14:00.
     if ([0, 2, 4].includes(wd)) made.push({ id: await departure(lonAnt, "outbound", day, "07:00", big), route: "LON-ANT", direction: "outbound", day });
     if ([1, 3, 5].includes(wd)) made.push({ id: await departure(lonAnt, "return", day, "14:00", big), route: "LON-ANT", direction: "return", day });
@@ -454,6 +462,26 @@ async function seed() {
   if (secondBack) {
     await book(secondBack, people.adler, "provisional", 1);
     await book(secondBack, people.weinberg, "waived", 1);
+  }
+
+  console.log("Booking requests (as if sent from /book)...");
+  const { count: pendingReq } = await db
+    .from("booking_requests")
+    .select("id", { count: "exact", head: true })
+    .like("contact_phone", `${PHONE_PREFIX}%`);
+  if (!pendingReq) {
+    const outs = made.filter((d) => d.route === "LON-ANT" && d.direction === "outbound").sort((a, b) => a.day - b.day);
+    const backs = made.filter((d) => d.route === "LON-ANT" && d.direction === "return").sort((a, b) => a.day - b.day);
+    const reqs = [
+      { direction: "outbound", outbound_departure_id: outs[0]?.id, return_departure_id: backs[2]?.id ?? null, men: 1, women: 1, boys: 2, girls: 1, infants: 1, luggage_large: 3, luggage_small: 2, luggage_hand: 4, pickup_line1: "22 Lordship Road", pickup_postcode: "N16 0QS", pickup_city: "London", dropoff_line1: "Mercatorstraat 40", dropoff_postcode: "2018", dropoff_city: "Antwerpen", mobility_needs: "", contact_name: "Yitzchok Gross", contact_phone: n(201), contact_email: "", preferred_language: "yi", notes: "Bringing a buggy" },
+      { direction: "outbound", outbound_departure_id: outs[1]?.id, return_departure_id: null, men: 0, women: 1, boys: 0, girls: 0, infants: 0, luggage_large: 1, luggage_small: 0, luggage_hand: 1, pickup_line1: "9 Golders Green Road", pickup_postcode: "NW11 8DY", pickup_city: "London", dropoff_line1: "Van Den Nestlei 12", dropoff_postcode: "2018", dropoff_city: "Antwerpen", mobility_needs: "Walks with a frame, needs help with steps", contact_name: "Sarah Klein", contact_phone: n(202), contact_email: "", preferred_language: "en", notes: "" },
+      { direction: "return", outbound_departure_id: backs[0]?.id, return_departure_id: null, men: 2, women: 0, boys: 0, girls: 0, infants: 0, luggage_large: 2, luggage_small: 2, luggage_hand: 2, pickup_line1: "Plantin en Moretuslei 150", pickup_postcode: "2018", pickup_city: "Antwerpen", dropoff_line1: "48 Bethune Road", dropoff_postcode: "N16 5BD", dropoff_city: "London", mobility_needs: "", contact_name: "Mordechai Braun", contact_phone: n(203), contact_email: "", preferred_language: "nl", notes: "Two yeshiva bochurim" },
+      { direction: "return", outbound_departure_id: backs[1]?.id, return_departure_id: null, men: 1, women: 1, boys: 0, girls: 0, infants: 0, luggage_large: 2, luggage_small: 0, luggage_hand: 2, pickup_line1: "Lange Leemstraat 200", pickup_postcode: "2018", pickup_city: "Antwerpen", dropoff_line1: "5 Hendon Way", dropoff_postcode: "NW4 3LE", dropoff_city: "London", mobility_needs: "", contact_name: "Shmuel Fischer", contact_phone: n(204), contact_email: "", preferred_language: "en", notes: "Can they sit together?" },
+    ].filter((r) => r.outbound_departure_id);
+    for (const p of reqs) {
+      const { error } = await (db.rpc as unknown as (fn: string, args: object) => Promise<{ error: { message: string } | null }>)("submit_booking_request", { p });
+      if (error) console.log(`  request ${p.contact_name}: ${error.message}`);
+    }
   }
 
   const total = Object.values(people).flat().length;
