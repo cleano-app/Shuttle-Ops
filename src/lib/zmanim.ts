@@ -4,10 +4,12 @@
 // candle lighting across both cities.
 import { HebrewCalendar, Location, Zmanim } from "@hebcal/core";
 
+export type ZmanIcon = "sunrise" | "shema" | "tefillah" | "chatzos" | "mincha" | "candles" | "sunset" | "tzeis" | "havdalah";
+
 export interface CityZmanim {
   city: "London" | "Antwerp";
   tz: string;
-  rows: { label: string; time: string; at: Date | null }[];
+  rows: { label: string; icon: ZmanIcon; time: string; at: Date | null }[];
   shkia: Date | null;
   candles: Date | null;
   havdalah: Date | null;
@@ -55,18 +57,19 @@ export function zmanimFor(day: string): CityZmanim[] {
       shkia: valid(z.sunset()),
       tzeis: valid(z.tzeit(8.5)),
     };
-    const rows = [
-      { label: "Netz (sunrise)", at: at.netz },
-      { label: "Sof zman Shema (MGA)", at: at.shmaMga },
-      { label: "Sof zman Shema (Gra)", at: at.shma },
-      { label: "Sof zman Tefillah", at: at.tfila },
-      { label: "Chatzos", at: at.chatzos },
-      { label: "Mincha gedola", at: at.minchaGedola },
-      ...(candles ? [{ label: "Candle lighting", at: candles }] : []),
-      { label: "Shkia (sunset)", at: at.shkia },
-      { label: "Tzeis", at: at.tzeis },
-      ...(havdalah ? [{ label: "Havdalah", at: havdalah }] : []),
-    ].map((r) => ({ ...r, time: fmt(r.at) }));
-    return { city, tz, rows, shkia: at.shkia, candles, havdalah };
+    const rows: { label: string; icon: ZmanIcon; at: Date | null }[] = [
+      { label: "Netz (sunrise)", icon: "sunrise", at: at.netz },
+      { label: "Sof zman Shema (MGA)", icon: "shema", at: at.shmaMga },
+      { label: "Sof zman Shema (Gra)", icon: "shema", at: at.shma },
+      { label: "Sof zman Tefillah", icon: "tefillah", at: at.tfila },
+      { label: "Chatzos", icon: "chatzos", at: at.chatzos },
+      { label: "Mincha gedola", icon: "mincha", at: at.minchaGedola },
+      ...(candles ? [{ label: "Candle lighting", icon: "candles" as const, at: candles }] : []),
+      { label: "Shkia (sunset)", icon: "sunset", at: at.shkia },
+      { label: "Tzeis", icon: "tzeis", at: at.tzeis },
+      ...(havdalah ? [{ label: "Havdalah", icon: "havdalah" as const, at: havdalah }] : []),
+    ];
+    const timedRows = rows.map((r) => ({ ...r, time: fmt(r.at) }));
+    return { city, tz, rows: timedRows, shkia: at.shkia, candles, havdalah };
   });
 }

@@ -7,6 +7,7 @@ import { journeyEnds, placeStyle } from "@/lib/places";
 import { Journey } from "@/components/Journey";
 import { AddFab } from "@/components/shell/AddFab";
 import { zmanimFor } from "@/lib/zmanim";
+import { ZmanIcon } from "@/components/ZmanIcon";
 
 type DepartureRow = {
   id: string;
@@ -116,7 +117,14 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
       z.candles && { at: z.candles, label: `Candles ${z.city}`, color: "#d97706" },
       z.shkia && { at: z.shkia, label: `Shkia ${z.city}`, color: z.city === "London" ? "#1d4ed8" : "#dc2626" },
     ].filter(Boolean) as { at: Date; label: string; color: string }[]
-  );
+  )
+    .sort((a, b) => a.at.getTime() - b.at.getTime())
+    // Labels within 12 minutes of the previous one go on the other side so
+    // they don't sit on top of each other.
+    .map((m, i, all) => ({
+      ...m,
+      left: i > 0 && m.at.getTime() - all[i - 1].at.getTime() < 12 * 60_000 && !(i > 1 && all[i - 1].at.getTime() - all[i - 2].at.getTime() < 12 * 60_000),
+    }));
 
   // Erev Shabbos / Yom Tov: anything still on the road at the earliest
   // candle lighting (either city) gets flagged.
@@ -136,7 +144,7 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
   const heading = formatUk(ukLocalToIso(`${date}T12:00`), { date: "full" });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20 md:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href={`/office/calendar?d=${date}`} className="text-sm text-slate-500 hover:underline">
           ← Month
@@ -224,7 +232,7 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
                   style={{ top: ((min - FIRST_HOUR * 60) / 60) * HOUR_PX, borderColor: m.color }}
                 >
                   <span
-                    className="absolute end-1 -top-4 rounded bg-white/90 px-1 text-[10px] font-semibold"
+                    className={`absolute -top-4 rounded bg-white/90 px-1 text-[10px] font-semibold ${m.left ? "start-1" : "end-1"}`}
                     style={{ color: m.color }}
                   >
                     {m.label} {formatUk(m.at.toISOString(), { time: "short" })}
@@ -298,7 +306,10 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
           ))}
           {zmanim[0].rows.map((row, i) => (
             <div key={row.label} className="contents">
-              <span className={row.label.startsWith("Candle") || row.label === "Havdalah" ? "font-semibold text-amber-700" : "text-slate-600"}>
+              <span
+                className={`flex items-center gap-2.5 ${row.label.startsWith("Candle") || row.label === "Havdalah" ? "font-semibold text-amber-700" : "text-slate-600"}`}
+              >
+                <ZmanIcon name={row.icon} />
                 {row.label}
               </span>
               {zmanim.map((z) => (
