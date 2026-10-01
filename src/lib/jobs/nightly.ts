@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generateManifestPdf } from "@/lib/pdf/generateManifestPdf";
 import { emailConfigured, sendEmail } from "@/lib/email/sendEmail";
 import { formatUk, isoToUkLocal, ukLocalToIso } from "@/lib/time";
+import { journeyLabel } from "@/lib/journey";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -96,12 +97,21 @@ async function tomorrowsManifests(supabase: Admin, report: JobReport) {
 
   const { data: office } = await supabase.from("profiles").select("id").in("role", ["admin", "office"]);
   const { data: users } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-  const emailOf = new Map((users?.users ?? []).map((u) => [u.id, u.email ?? ""]));
+  // Never mail test logins (@*.dev / @*.test, switched-off accounts): they
+  // bounce, and bounces hurt the sending domain.
+  const emailOf = new Map(
+    (users?.users ?? [])
+      .filter(
+        (u) =>
+          u.email &&
+          !/\.(dev|test|invalid|example)$/i.test(u.email) &&
+          !(u.banned_until && new Date(u.banned_until) > new Date())
+      )
+      .map((u) => [u.id, u.email ?? ""])
+  );
 
   for (const d of departures) {
-    const name = `${(d as unknown as { routes?: { name?: string } }).routes?.name ?? "Route"} ${d.direction} ${formatUk(
-      d.depart_at
-    )}`;
+    const name = `${journeyLabel((d as unknown as { routes?: { name?: string } }).routes?.name, d.direction)} ${formatUk(d.depart_at)}`;
     if (!emailConfigured()) {
       report.manifests.push({ departure: name, sentTo: 0, status: "skipped — email not configured" });
       continue;
@@ -155,6 +165,8 @@ export async function runNightlyJobs(): Promise<JobReport> {
   await expireProvisionalHolds(supabase, report);
   await documentExpiryTasks(supabase, report);
   await legTimings(supabase, report);
-  await tomorrowsManifests(supabase, report);
+  // Paused by the owner (1 Oct 2026: "no need tickets for now"). Set
+  // MANIFEST_EMAILS=on in Vercel to send them again.
+  if (process.env.MANIFEST_EMAILS === "on") await tomorrowsManifests(supabase, report);
   return report;
 }

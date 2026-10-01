@@ -114,7 +114,7 @@ export function ManifestDocument({ data }: { data: ManifestData }) {
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.title}>
-            {journeyLabel(data.routeName, data.direction)}
+            {journeyLabel(data.routeName, data.direction).replace("→", "to")}
           </Text>
           <Text style={styles.subtitle}>
             {new Date(data.departAt).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" })}
