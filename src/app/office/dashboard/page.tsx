@@ -65,10 +65,9 @@ export default async function OfficeDashboardPage() {
           </h1>
           <p className="text-sm text-slate-500">{formatUk(new Date(), { date: "full" })}</p>
         </div>
+        {/* Booking lives in the bottom bar / sidebar ("Book"), not here
+            (owner, 1 Oct 2026). */}
         <div className="flex gap-2">
-          <Link href="/office/booking-console" className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white">
-            Book a passenger
-          </Link>
           <Link
             href="/office/departures"
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"

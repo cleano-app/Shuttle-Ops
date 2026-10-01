@@ -14,7 +14,9 @@
     "db:seed": "tsx scripts/seed-users.ts",
     "db:seed-demo": "tsx scripts/seed-demo-data.ts",
     "db:clean-test-data": "tsx scripts/clean-test-data.ts",
-    "create-admin": "tsx scripts/create-admin.ts"
+    "create-admin": "tsx scripts/create-admin.ts",
+    "db:seed-test-data": "tsx scripts/seed-test-data.ts",
+    "setup-accounts": "tsx scripts/setup-accounts.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.6.1",
