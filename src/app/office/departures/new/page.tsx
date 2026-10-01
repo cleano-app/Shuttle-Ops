@@ -12,7 +12,14 @@ const label = "block text-sm font-medium text-slate-700";
 
 /** New departure on its own page — reached from the phone "+" and the
  * desktop "New departure" button. Opens the departure once created. */
-export default async function NewDeparturePage() {
+export default async function NewDeparturePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
+  // From the calendar's "+ New departure on this day".
+  const { date } = await searchParams;
+  const defaultDepart = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T07:00` : undefined;
   const supabase = await createClient();
   const { data: routes } = await supabase.from("routes").select("id, name").eq("active", true).order("name");
 
@@ -68,7 +75,7 @@ export default async function NewDeparturePage() {
         </label>
         <label className={`${label} col-span-2`}>
           Departs (UK time)
-          <input name="depart_at" type="datetime-local" required className={input} />
+          <input name="depart_at" type="datetime-local" required defaultValue={defaultDepart} className={input} />
         </label>
         <label className={label}>
           Seats

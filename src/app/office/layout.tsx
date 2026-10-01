@@ -14,7 +14,9 @@ import type { NavGroup, NavItem } from "@/components/shell/nav";
 const PRIMARY_ITEMS: NavItem[] = [
   { href: "/office/dashboard", label: "Dashboard", icon: "home" },
   { href: "/office/booking-console", label: "Book", icon: "ticket" },
-  { href: "/office/departures", label: "Departures", icon: "calendar" },
+  // Jewish / regular calendar with bookings (owner, 1 Oct 2026).
+  { href: "/office/calendar", label: "Calendar", icon: "calendar" },
+  { href: "/office/departures", label: "Departures", icon: "list" },
   { href: "/office/dispatch", label: "Dispatch", icon: "route" },
 ];
 

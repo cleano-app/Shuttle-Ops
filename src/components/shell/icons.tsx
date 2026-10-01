@@ -8,6 +8,7 @@ export type IconName =
   | "home"
   | "ticket"
   | "calendar"
+  | "list"
   | "route"
   | "users"
   | "package"
@@ -47,6 +48,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="3.5" y="5" width="17" height="15" rx="2" />
       <path d="M8 3v4M16 3v4M3.5 10h17" strokeLinecap="round" />
+    </>
+  ),
+  list: (
+    <>
+      <path d="M9 6h11M9 12h11M9 18h11" strokeLinecap="round" />
+      <circle cx="4.5" cy="6" r="1" />
+      <circle cx="4.5" cy="12" r="1" />
+      <circle cx="4.5" cy="18" r="1" />
     </>
   ),
   route: (
