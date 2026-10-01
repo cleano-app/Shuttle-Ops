@@ -4,7 +4,7 @@ import { useState } from "react";
 
 const NAMES: Record<string, string> = {
   EUR: "Euro",
-  GBP: "Pound",
+  GBP: "Pound sterling",
   USD: "US dollar",
   ILS: "Israeli shekel",
   CHF: "Swiss franc",
@@ -19,6 +19,31 @@ const NAMES: Record<string, string> = {
   DKK: "Danish krone",
 };
 const SYMBOL: Record<string, string> = { EUR: "€", GBP: "£", USD: "$", ILS: "₪", CHF: "CHF", JPY: "¥" };
+
+// Country for each ECB currency, for its flag (owner: "add flags"). The
+// euro uses the EU flag.
+const COUNTRY: Record<string, string> = {
+  EUR: "EU", GBP: "GB", USD: "US", ILS: "IL", CHF: "CH", AUD: "AU", BRL: "BR", CAD: "CA", CNY: "CN",
+  CZK: "CZ", DKK: "DK", HKD: "HK", HUF: "HU", IDR: "ID", INR: "IN", ISK: "IS", JPY: "JP", KRW: "KR",
+  MXN: "MX", MYR: "MY", NOK: "NO", NZD: "NZ", PHP: "PH", PLN: "PL", RON: "RO", SEK: "SE", SGD: "SG",
+  THB: "TH", TRY: "TR", ZAR: "ZA", BGN: "BG",
+};
+const MORE_NAMES: Record<string, string> = {
+  BRL: "Brazilian real", CNY: "Chinese yuan", HKD: "Hong Kong dollar", IDR: "Indonesian rupiah",
+  INR: "Indian rupee", ISK: "Icelandic króna", KRW: "South Korean won", MXN: "Mexican peso",
+  MYR: "Malaysian ringgit", NZD: "New Zealand dollar", PHP: "Philippine peso", RON: "Romanian leu",
+  SGD: "Singapore dollar", THB: "Thai baht", TRY: "Turkish lira", ZAR: "South African rand", BGN: "Bulgarian lev",
+};
+
+/** Regional-indicator flag emoji, e.g. "GB" -> 🇬🇧. */
+function flag(code: string): string {
+  const cc = COUNTRY[code];
+  if (!cc) return "";
+  return String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+function currencyName(code: string) {
+  return NAMES[code] ?? MORE_NAMES[code] ?? code;
+}
 
 function round(n: number) {
   return Number.isFinite(n) ? String(Math.round(n * 100) / 100) : "";
@@ -48,16 +73,19 @@ function Field({
           value={code}
           onChange={(e) => onCode(e.target.value)}
           aria-label="Currency"
-          className="bg-transparent py-2 text-sm font-semibold text-slate-700"
+          className="max-w-[7.5rem] bg-transparent py-2 text-sm font-semibold text-slate-700"
         >
           {codes.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {`${flag(c)} ${c} · ${currencyName(c)}`.trim()}
             </option>
           ))}
         </select>
       ) : (
-        <span className="w-8 shrink-0 text-lg font-semibold text-slate-700">{SYMBOL[code] ?? code}</span>
+        <span className="flex shrink-0 items-center gap-1 text-lg font-semibold text-slate-700">
+          <span aria-hidden className="text-xl">{flag(code)}</span>
+          {SYMBOL[code] ?? code}
+        </span>
       )}
       <input
         inputMode="decimal"
@@ -84,16 +112,17 @@ export function CurrencyConverter({ perEur, date }: { perEur: Record<string, num
 
   const [showOther, setShowOther] = useState(false);
   const codes = Object.keys(perEur).sort((a, b) => {
-    const pin = ["EUR", "GBP", "USD", "ILS", "CHF"];
+    // ILS and USD first (owner), then the two shuttle currencies.
+    const pin = ["ILS", "USD", "EUR", "GBP", "CHF"];
     const ia = pin.indexOf(a);
     const ib = pin.indexOf(b);
     if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
     return a.localeCompare(b);
   });
   const [from, setFrom] = useState("GBP");
-  const [to, setTo] = useState("USD");
+  const [to, setTo] = useState("ILS");
   const [fromAmt, setFromAmt] = useState("100");
-  const [toAmt, setToAmt] = useState(round(100 * rate("GBP", "USD")));
+  const [toAmt, setToAmt] = useState(round(100 * rate("GBP", "ILS")));
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4">
