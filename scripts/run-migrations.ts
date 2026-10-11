@@ -38,6 +38,18 @@ async function main() {
     alter table schema_migrations enable row level security;
     revoke all on schema_migrations from anon, authenticated;
   `);
+  // This table lives in the public schema, so PostgREST auto-exposes it to
+  // the anon key like any other public table - without RLS, anyone with the
+  // project URL could read the full migration history or write/delete rows
+  // in it (Supabase's linter flags this as rls_disabled_in_public). It's
+  // never queried through PostgREST - only this script, over a direct
+  // Postgres connection - so enabling RLS with zero policies (default deny)
+  // fully locks out the API without affecting migrations. Runs on every
+  // invocation, not just first bootstrap, so it also closes the gap on a
+  // table that already existed before this line was added.
+  await client.query(`
+    alter table if exists schema_migrations enable row level security;
+  `);
 
   const dir = join(__dirname, "..", "supabase", "migrations");
   const files = readdirSync(dir)
